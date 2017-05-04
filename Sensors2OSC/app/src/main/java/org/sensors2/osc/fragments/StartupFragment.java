@@ -4,10 +4,12 @@ import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CompoundButton;
+import android.widget.ToggleButton;
 
 import org.sensors2.common.sensors.Parameters;
 import org.sensors2.osc.R;
@@ -18,7 +20,7 @@ public class StartupFragment extends Fragment {
 
     private CompoundButton activeButton;
 
-    @Override
+    /*@Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View v = inflater.inflate(R.layout.activity_start_up, container, false);
 
@@ -29,6 +31,20 @@ public class StartupFragment extends Fragment {
             createSensorFragments((org.sensors2.osc.sensors.Parameters) parameters);
         }
 
+        return v;
+    }*/
+    @Override
+    /*
+    @author: Karishma Changlani
+    Added May 3rd 2017
+    New updated OnCreateView for wotw
+     */
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        View v = inflater.inflate(R.layout.activity_start_up_test, container, false);
+
+        activeButton = (ToggleButton) v.findViewById(R.id.toggleButton);
+        StartUpActivity activity = (StartUpActivity) getActivity();
+        activeButton.setOnCheckedChangeListener(activity);
         return v;
     }
 

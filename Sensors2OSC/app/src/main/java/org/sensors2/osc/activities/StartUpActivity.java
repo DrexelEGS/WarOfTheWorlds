@@ -29,6 +29,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.CompoundButton;
+import android.widget.TextView;
 
 import org.sensors2.common.dispatch.DataDispatcher;
 import org.sensors2.common.dispatch.Measurement;
@@ -389,6 +390,7 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
         // We do not care about that
     }
 
+    /*
     @Override
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         if (isChecked) {
@@ -399,6 +401,23 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
         } else {
             this.wakeLock.release();
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+        active = isChecked;
+    }*/
+    /*
+    @author: Karishma Changlani
+     */
+    @Override
+    public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+        View view= compoundButton.getRootView();
+        TextView tv = (TextView)view.findViewById(R.id.DisplayText);
+        //TODO: Turn the desired sensors on
+        if (isChecked) {
+            for(Parameters parameters: getSensors()){
+                tv.append(parameters.getSensorName()+"\n");
+            }
+        } else {
+            tv.setText("");
         }
         active = isChecked;
     }
