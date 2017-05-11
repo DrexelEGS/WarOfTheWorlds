@@ -38,13 +38,16 @@ import org.sensors2.common.sensors.Parameters;
 import org.sensors2.common.sensors.SensorActivity;
 import org.sensors2.common.sensors.SensorCommunication;
 import org.sensors2.osc.R;
+import org.sensors2.osc.dispatch.Bundling;
 import org.sensors2.osc.dispatch.OscConfiguration;
 import org.sensors2.osc.dispatch.OscDispatcher;
+import org.sensors2.osc.dispatch.SensorConfiguration;
 import org.sensors2.osc.fragments.MultiTouchFragment;
 import org.sensors2.osc.fragments.SensorFragment;
 import org.sensors2.osc.fragments.StartupFragment;
 import org.sensors2.osc.sensors.Settings;
 
+import java.lang.reflect.Array;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
@@ -404,19 +407,49 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
         }
         active = isChecked;
     }*/
-    /*
+
+    /* New version of onCheckedChanged event listener
     @author: Karishma Changlani
      */
     @Override
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         View view= compoundButton.getRootView();
         TextView tv = (TextView)view.findViewById(R.id.DisplayText);
-        //TODO: Turn the desired sensors on
-        if (isChecked) {
-            for(Parameters parameters: getSensors()){
-                tv.append(parameters.getSensorName()+"\n");
+        //TODO: Send information from the desired sensors
+        //TODO: Set sensor configuration before entering this function
+        String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
+        ArrayList<String> availableSensors = new ArrayList<String>();
+        for(Parameters parameters: getSensors()) {
+            org.sensors2.osc.sensors.Parameters newParameters = (org.sensors2.osc.sensors.Parameters) parameters;
+            String name = newParameters.getName();
+            availableSensors.add(name);
+            for(String s: desiredSensors) {
+                if (name.toLowerCase().contains(s.toLowerCase())){
+                    Bundle args = new Bundle();
+                    args.putInt(Bundling.DIMENSIONS, newParameters.getDimensions());
+                    args.putInt(Bundling.SENSOR_TYPE, newParameters.getSensorType());
+                    args.putString(Bundling.OSC_PREFIX, newParameters.getOscPrefix());
+                    args.putString(Bundling.NAME, newParameters.getName());
+                    SensorConfiguration sc = new SensorConfiguration();
+                    sc.setIndex(args.getInt(Bundling.INDEX, 0));
+                    sc.setSensorType(args.getInt(Bundling.SENSOR_TYPE));
+                    sc.setOscParam(args.getString(Bundling.OSC_PREFIX));
+                    sc.setSend(isChecked);
+                    this.dispatcher.addSensorConfiguration(sc);
+                }
             }
-        } else {
+        }
+        if(isChecked){
+            tv.setText("Desired Sensors:\n");
+            for(String s:desiredSensors){
+                tv.append(s + "\n");
+            }
+            tv.append("\n Available Senors: \n");
+            for(String s:availableSensors){
+                tv.append(s + "\n");
+            }
+        }
+        else{
             tv.setText("");
         }
         active = isChecked;

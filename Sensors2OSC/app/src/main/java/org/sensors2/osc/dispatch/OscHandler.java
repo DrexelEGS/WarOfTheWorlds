@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
 
 import com.illposed.osc.OSCMessage;
 
@@ -32,6 +33,7 @@ public class OscHandler extends Handler {
 		List<Object> changes = new ArrayList<Object>();
 		changes.add(value);
 		OSCMessage oscMessage = new OSCMessage("/" + oscParameter, changes);
+        Log.i("OSCParam","/" + oscParameter + " " + changes);
 		try {
 			configuration.getOscPort().send(oscMessage);
 		} catch (IOException e) {

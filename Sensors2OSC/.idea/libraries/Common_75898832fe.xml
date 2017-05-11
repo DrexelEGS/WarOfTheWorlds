@@ -1,8 +1,8 @@
 <component name="libraryTable">
   <library name="Common-75898832fe">
     <CLASSES>
-      <root url="file://$PROJECT_DIR$/app/build/intermediates/exploded-aar/com.github.SensorApps/Common/75898832fe/res" />
-      <root url="jar://$PROJECT_DIR$/app/build/intermediates/exploded-aar/com.github.SensorApps/Common/75898832fe/jars/classes.jar!/" />
+      <root url="jar://$USER_HOME$/.android/build-cache/8eea364fb8ee7ce8f92671d916264a1833c8157d/output/jars/classes.jar!/" />
+      <root url="file://$USER_HOME$/.android/build-cache/8eea364fb8ee7ce8f92671d916264a1833c8157d/output/res" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />
