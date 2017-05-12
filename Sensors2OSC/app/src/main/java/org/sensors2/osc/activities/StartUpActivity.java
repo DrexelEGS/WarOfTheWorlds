@@ -45,6 +45,7 @@ import org.sensors2.osc.dispatch.SensorConfiguration;
 import org.sensors2.osc.fragments.MultiTouchFragment;
 import org.sensors2.osc.fragments.SensorFragment;
 import org.sensors2.osc.fragments.StartupFragment;
+import org.sensors2.osc.sensors.SensorDimensions;
 import org.sensors2.osc.sensors.Settings;
 
 import java.lang.reflect.Array;
@@ -52,6 +53,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class StartUpActivity extends FragmentActivity implements SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener {
 
@@ -70,6 +72,8 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
     public Settings getSettings() {
         return this.settings;
     }
+    public ArrayList<String> availableSensors = new ArrayList<>();
+    public  String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
 
     @Override
     @SuppressLint("NewApi")
@@ -417,27 +421,8 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
         TextView tv = (TextView)view.findViewById(R.id.DisplayText);
         //TODO: Send information from the desired sensors
         //TODO: Set sensor configuration before entering this function
-        String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
-        ArrayList<String> availableSensors = new ArrayList<String>();
-        for(Parameters parameters: getSensors()) {
-            org.sensors2.osc.sensors.Parameters newParameters = (org.sensors2.osc.sensors.Parameters) parameters;
-            String name = newParameters.getName();
-            availableSensors.add(name);
-            for(String s: desiredSensors) {
-                if (name.toLowerCase().contains(s.toLowerCase())){
-                    Bundle args = new Bundle();
-                    args.putInt(Bundling.DIMENSIONS, newParameters.getDimensions());
-                    args.putInt(Bundling.SENSOR_TYPE, newParameters.getSensorType());
-                    args.putString(Bundling.OSC_PREFIX, newParameters.getOscPrefix());
-                    args.putString(Bundling.NAME, newParameters.getName());
-                    SensorConfiguration sc = new SensorConfiguration();
-                    sc.setIndex(args.getInt(Bundling.INDEX, 0));
-                    sc.setSensorType(args.getInt(Bundling.SENSOR_TYPE));
-                    sc.setOscParam(args.getString(Bundling.OSC_PREFIX));
-                    sc.setSend(isChecked);
-                    this.dispatcher.addSensorConfiguration(sc);
-                }
-            }
+        for(SensorConfiguration sc : this.dispatcher.getSensorConfigurations()){
+            sc.setSend(isChecked);
         }
         if(isChecked){
             tv.setText("Desired Sensors:\n");

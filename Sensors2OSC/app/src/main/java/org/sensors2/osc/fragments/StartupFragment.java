@@ -15,6 +15,11 @@ import org.sensors2.common.sensors.Parameters;
 import org.sensors2.osc.R;
 import org.sensors2.osc.activities.StartUpActivity;
 import org.sensors2.osc.dispatch.Bundling;
+import org.sensors2.osc.dispatch.OscDispatcher;
+import org.sensors2.osc.dispatch.SensorConfiguration;
+import org.sensors2.osc.sensors.SensorDimensions;
+
+import java.util.Map;
 
 public class StartupFragment extends Fragment {
 
@@ -44,6 +49,33 @@ public class StartupFragment extends Fragment {
 
         activeButton = (ToggleButton) v.findViewById(R.id.toggleButton);
         StartUpActivity activity = (StartUpActivity) getActivity();
+        for(Parameters parameters: activity.getSensors()) {
+            org.sensors2.osc.sensors.Parameters newParameters = (org.sensors2.osc.sensors.Parameters) parameters;
+            String name = newParameters.getName();
+            activity.availableSensors.add(name);
+            for (String s : activity.desiredSensors) {
+                if (name.toLowerCase().contains(s.toLowerCase())) {
+                    Bundle args = new Bundle();
+                    int dimensions = newParameters.getDimensions();
+                    String oscPrefix = newParameters.getOscPrefix();
+                    for (Map.Entry<Integer, String> oscSuffix : SensorDimensions.GetOscSuffixes(dimensions).entrySet()) {
+                        String direction = oscSuffix.getValue();
+                        int i = oscSuffix.getKey();
+                        args.putInt(Bundling.SENSOR_TYPE, newParameters.getSensorType());
+                        args.putString(Bundling.NAME, direction);
+                        args.putString(Bundling.OSC_PREFIX, oscPrefix + direction);
+                        args.putInt(Bundling.INDEX, i);
+                        args.putString(Bundling.NAME, newParameters.getName());
+                        SensorConfiguration sc = new SensorConfiguration();
+                        sc.setIndex(args.getInt(Bundling.INDEX, 0));
+                        sc.setSensorType(args.getInt(Bundling.SENSOR_TYPE));
+                        sc.setOscParam(args.getString(Bundling.OSC_PREFIX));
+                        OscDispatcher dispatcher = (OscDispatcher) activity.getDispatcher();
+                        dispatcher.addSensorConfiguration(sc);
+                    }
+                }
+            }
+        }
         activeButton.setOnCheckedChangeListener(activity);
         return v;
     }

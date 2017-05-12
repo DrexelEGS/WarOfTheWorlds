@@ -50,4 +50,8 @@ public class OscDispatcher implements DataDispatcher {
 		OscHandler handler = communication.getOscHandler();
 		handler.sendMessage(message);
 	}
+
+	public List<SensorConfiguration> getSensorConfigurations(){
+		return sensorConfigurations;
+	}
 }
