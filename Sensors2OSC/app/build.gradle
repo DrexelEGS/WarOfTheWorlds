@@ -7,7 +7,7 @@ android {
     defaultConfig {
         applicationId "org.sensors2.osc"
         targetSdkVersion 23
-        minSdkVersion 8
+        minSdkVersion 4
         versionCode 1
         versionName "0.1.0"
     }
@@ -31,4 +31,5 @@ dependencies {
     compile 'org.apmem.tools:layouts:1.9@aar'
     compile 'com.android.support:support-v4:23.1.1'
     compile 'com.github.SensorApps:Common:75898832fe'
+    compile project(':SuperCollider-Android-studioproject')
 }

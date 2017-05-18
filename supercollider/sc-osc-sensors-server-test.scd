@@ -13,14 +13,14 @@
 	ControlSpec.specs[\linearacceleration] = ControlSpec(-19.6133, 19.6133);
 	// orientation will require preprocessing for different X scales and potentially to wrap angle values
 	ControlSpec.specs[\orientation] = ControlSpec(-180, 180);
-	
+
 	// open the port(s) for OSC from Android
-	thisProcess.openUDPPort(9000); 
+	thisProcess.openUDPPort(9000);
 	thisProcess.openPorts;
 
 	// Boot the server, if you haven't already
 	Server.default.waitForBoot{
-	
+
 		// Simple subtractive synthesis. Light sensor turns on and off (must be dark to hear)
 		sensor = 'accelerometer';
 		a = {|freq = 110, ffreq = 180, rq = 0.1, amp = 0.2, gate=1|
@@ -29,17 +29,17 @@
 			sig = BLowPass.ar(sig, ffreq.lag(0.1), rq.lag(0.1), amp.lag(0.1));
 			Pan2.ar(sig * EnvGen.kr(Env.asr(0.1, 1, 1), gate), 0);
 		}.play;
-		
-		OSCFunc.newMatching({|msg, time, addr, recvPort| 
+
+		OSCFunc.newMatching({|msg, time, addr, recvPort|
 			a.set(\freq, sensor.asSpec.unmap(msg[1]).linexp(0, 1.0, 40, 280.0));
 		}, sensor ++ '/X');
-		OSCFunc.newMatching({|msg, time, addr, recvPort| 
+		OSCFunc.newMatching({|msg, time, addr, recvPort|
 			a.set(\ffreq, sensor.asSpec.unmap(msg[1]).linexp(0, 1.0, 20, 20000.0));
 		}, sensor ++ '/Y');
-		OSCFunc.newMatching({|msg, time, addr, recvPort| 
+		OSCFunc.newMatching({|msg, time, addr, recvPort|
 			a.set(\amp, sensor.asSpec.unmap(msg[1]).squared);
 		}, sensor ++ '/Z');
-		OSCFunc.newMatching({|msg, time, addr, recvPort| 
+		OSCFunc.newMatching({|msg, time, addr, recvPort|
 			(msg[1] < 10).if({
 				a.set(\gate, 1.0);
 			}, {
@@ -48,3 +48,4 @@
 		}, 'light');
 	}
 )
+
