@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/Sensors2OSC.iml" filepath="$PROJECT_DIR$/Sensors2OSC.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SuperCollider-aar/SuperCollider-aar.iml" filepath="$PROJECT_DIR$/SuperCollider-aar/SuperCollider-aar.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SuperCollider-library/SuperCollider-library.iml" filepath="$PROJECT_DIR$/SuperCollider-library/SuperCollider-library.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
     </modules>
   </component>

@@ -1,1 +1,1 @@
-include ':app', 'SuperCollider-Android-studioproject'
+include ':app', 'SuperCollider-library', ':SuperCollider-aar'

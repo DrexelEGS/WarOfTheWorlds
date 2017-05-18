@@ -2,6 +2,7 @@
 <manifest
     package="org.sensors2.osc"
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="auto">
 
     <application
@@ -56,4 +57,6 @@
     <uses-feature
         android:name="android.hardware.nfc"
         android:required="false" />
+
+    <uses-sdk tools:overrideLibrary="org.sensors2.common" />
 </manifest>
