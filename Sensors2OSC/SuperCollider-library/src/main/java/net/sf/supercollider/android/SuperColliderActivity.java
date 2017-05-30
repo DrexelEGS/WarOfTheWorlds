@@ -21,7 +21,7 @@ import android.widget.Toast;
  * It creates an ScServiceConnection object through which it gets a SuperCollider.Stub.  The stub
  * object provides access to the SuperCollider Service through IPC- it does not run in the same process 
  * space as this Application.  The stub is then wired simply through the OnTouchEventListener of the
- * main GUI widget, to play a note when you touch it.
+ * main GUI widgezt, to play a note when you touch it.
  * 
  * The only SC-A class that this activity needs to be directly aware of is the generated ISuperCollider class
  * 

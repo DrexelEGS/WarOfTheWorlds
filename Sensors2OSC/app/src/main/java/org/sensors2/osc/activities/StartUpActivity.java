@@ -1,10 +1,14 @@
 package org.sensors2.osc.activities;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
@@ -16,12 +20,16 @@ import android.nfc.tech.MifareClassic;
 import android.nfc.tech.MifareUltralight;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Parcelable;
 import android.os.PowerManager;
+import android.os.RemoteException;
 import android.preference.PreferenceManager;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -30,6 +38,11 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.CompoundButton;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import net.sf.supercollider.android.ISuperCollider;
+import net.sf.supercollider.android.OscMessage;
+import net.sf.supercollider.android.SuperColliderActivity;
 
 import org.sensors2.common.dispatch.DataDispatcher;
 import org.sensors2.common.dispatch.Measurement;
@@ -64,6 +77,9 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
     private PowerManager.WakeLock wakeLock;
     private boolean active;
     private StartupFragment startupFragment;
+    private ISuperCollider.Stub superCollider;
+    private TextView mainWidget = null;
+    private ServiceConnection conn = new ScServiceConnection();
 
     private NfcAdapter mAdapter;
     private PendingIntent mPendingIntent;
@@ -75,12 +91,120 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
     public ArrayList<String> availableSensors = new ArrayList<>();
     public  String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
 
+    private class ScServiceConnection implements ServiceConnection {
+        //@Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            StartUpActivity.this.superCollider = (ISuperCollider.Stub) service;
+            try {
+                // Kick off the supercollider playback routine
+                superCollider.start();
+                // Start a synth playing
+                superCollider.sendMessage(OscMessage.createSynthMessage("default", OscMessage.defaultNodeId, 0, 1));
+                setUpControls(); // now we have an audio engine, let the activity hook up its controls
+            } catch (RemoteException re) {
+                re.printStackTrace();
+            }
+        }
+        //@Override
+        public void onServiceDisconnected(ComponentName name) {
+
+        }
+    }
+
+    /**
+     * Provide the glue between the user's greasy fingers and the supercollider's shiny metal body
+     * Fix how this gets osc messages
+     */
+    public void setUpControls() {
+        if (mainWidget!=null) mainWidget.setOnTouchListener(new View.OnTouchListener() {
+            //@Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (event.getAction()==MotionEvent.ACTION_UP) {
+                    // OSC message right here!
+                    OscMessage noteMessage = new OscMessage( new Object[] {
+                            "/n_set", OscMessage.defaultNodeId, "amp", 0f
+                    });
+                    try {
+                        // Now send it over the interprocess link to SuperCollider running as a Service
+                        superCollider.sendMessage(noteMessage);
+                    } catch (RemoteException e) {
+                        Toast.makeText(
+                                StartUpActivity.this,
+                                "Failed to communicate with SuperCollider!",
+                                Toast.LENGTH_SHORT);
+                        e.printStackTrace();
+                    }
+                } else if ((event.getAction()==MotionEvent.ACTION_DOWN) || (event.getAction()==MotionEvent.ACTION_MOVE)) {
+                    float vol = 1f - event.getY()/mainWidget.getHeight();
+                    OscMessage noteMessage = new OscMessage( new Object[] {
+                            "/n_set", OscMessage.defaultNodeId, "amp", vol
+                    });
+                    //float freq = 150+event.getX();
+                    //0 to mainWidget.getWidth() becomes sane-ish range of midinotes:
+                    float midinote = event.getX() * (70.f / mainWidget.getWidth()) + 28.f;
+                    float freq = sc_midicps(Math.round(midinote));
+                    OscMessage pitchMessage = new OscMessage( new Object[] {
+                            "/n_set", OscMessage.defaultNodeId, "freq", freq
+                    });
+                    try {
+                        superCollider.sendMessage(noteMessage);
+                        superCollider.sendMessage(pitchMessage);
+                    } catch (RemoteException e) {
+                        Toast.makeText(
+                                StartUpActivity.this,
+                                "Failed to communicate with SuperCollider!",
+                                Toast.LENGTH_SHORT);
+                        e.printStackTrace();
+                    }
+                }
+                return true;
+            }
+        });
+        try {
+            superCollider.openUDP(57110);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+    }
+
+    float sc_midicps(float note)
+    {
+        return (float) (440.0 * Math.pow((float)2., (note - 69.0) * (float)0.083333333333));
+    }
+
     @Override
     @SuppressLint("NewApi")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        int permissionCheck = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.RECORD_AUDIO);
+        // Here, thisActivity is the current activity
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
 
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.RECORD_AUDIO)) {
+
+                /* TODO: Show an explanation to the user *asynchronously* -- don't block
+                  this thread waiting for the user's response! After the user
+                  sees the explanation, try again to request the permission. */
+
+            } else {
+
+                // No explanation needed
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.RECORD_AUDIO},1);
+
+                // MY_PERMISSIONS_REQUEST_RECORD_AUDIO is an
+                // app-defined int constant. The callback method gets the
+                // result of the request.
+            }
+        }
+        setContentView(R.layout.activity_main);
+        mainWidget = new TextView(this); //TODO: Find a way to get rid of this
+        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
         this.settings = this.loadSettings();
         this.dispatcher = new OscDispatcher();
         this.sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -378,6 +502,18 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
         if (mAdapter != null) {
             mAdapter.disableForegroundDispatch(this);
             mAdapter.disableForegroundNdefPush(this);
+        }
+    }
+    @Override
+    @SuppressLint("NewApi")
+    protected void onStop() {
+        super.onStop();
+        try {
+            // Free up audio when the activity is not in the foreground
+            if (superCollider!=null) superCollider.stop();
+            this.finish();
+        } catch (RemoteException re) {
+            re.printStackTrace();
         }
     }
 

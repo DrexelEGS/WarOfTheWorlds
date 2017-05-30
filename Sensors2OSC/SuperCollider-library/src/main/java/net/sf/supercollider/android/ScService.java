@@ -129,7 +129,7 @@ public class ScService extends Service {
         } catch (Exception nsme) {
             // We can't get the newer methods
         }
-        return START_STICKY;
+        return Service.START_STICKY;
     }
 	
     public void stop() {

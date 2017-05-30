@@ -1,26 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest
-    package="org.sensors2.osc"
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    package="org.sensors2.osc"
     android:installLocation="auto">
+
+    <uses-sdk tools:overrideLibrary="org.sensors2.common" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
 
     <application
         android:allowBackup="true"
         android:icon="@drawable/wotw_header"
         android:label="@string/app_name"
         android:theme="@style/AppTheme">
+        <!--<uses-library android:name="net.sf.supercollider.android" />-->
         <activity
             android:name=".activities.StartUpActivity"
             android:label="@string/app_name"
             android:screenOrientation="portrait">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.nfc.action.TAG_DISCOVERED" />
+
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
@@ -30,7 +42,7 @@
             android:screenOrientation="portrait">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.StartUpActivity"/>
+                android:value=".activities.StartUpActivity" />
         </activity>
         <activity
             android:name=".activities.GuideActivity"
@@ -38,7 +50,7 @@
             android:screenOrientation="portrait">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.StartUpActivity"/>
+                android:value=".activities.StartUpActivity" />
         </activity>
         <activity
             android:name=".activities.AboutActivity"
@@ -46,17 +58,12 @@
             android:screenOrientation="portrait">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activities.StartUpActivity"/>
+                android:value=".activities.StartUpActivity" />
         </activity>
+        <service android:name="net.sf.supercollider.android.ScService" >
+            <intent-filter>
+                <action android:name="supercollider.START_SERVICE" />
+            </intent-filter>
+        </service>
     </application>
-
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.NFC" />
-
-    <uses-feature
-        android:name="android.hardware.nfc"
-        android:required="false" />
-
-    <uses-sdk tools:overrideLibrary="org.sensors2.common" />
 </manifest>
