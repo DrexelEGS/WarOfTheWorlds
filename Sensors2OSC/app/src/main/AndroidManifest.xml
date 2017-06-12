@@ -4,13 +4,39 @@
     package="org.sensors2.osc"
     android:installLocation="auto">
 
-    <uses-sdk tools:overrideLibrary="org.sensors2.common" />
+    <uses-sdk tools:overrideLibrary="com.google.android.gms.all,
+    com.google.android.gms.ads,
+    com.google.android.gms.auth,
+    com.google.android.gms.base,
+    com.google.android.gms.measurement,
+    com.google.android.gms,
+    com.google.android.gms.analytics,
+    com.google.android.gms.appindexing,
+    com.google.android.gms.appinvite,
+    com.google.android.gms.appstate,
+    com.google.android.gms.cast,
+    com.google.android.gms.drive,
+    com.google.android.gms.fitness,
+    com.google.android.gms.location,
+    com.google.android.gms.maps,
+    com.google.android.gms.games,
+    com.google.android.gms.gcm,
+    com.google.android.gms.identity,
+    com.google.android.gms.nearby,
+    com.google.android.gms.panorama,
+    com.google.android.gms.plus,
+    com.google.android.gms.safetynet,
+    com.google.android.gms.wallet,
+    com.google.android.gms.wearable,
+    org.sensors2.common" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <uses-feature
         android:name="android.hardware.nfc"
