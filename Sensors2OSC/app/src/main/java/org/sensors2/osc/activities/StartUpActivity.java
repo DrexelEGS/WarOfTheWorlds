@@ -55,7 +55,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class StartUpActivity extends FragmentActivity implements SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener {
+public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener {
 
     private Settings settings;
     private SensorCommunication sensorFactory;
@@ -64,6 +64,7 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
     private PowerManager.WakeLock wakeLock;
     private boolean active;
     private StartupFragment startupFragment;
+    private MapFragment mapFragment;
 
     private NfcAdapter mAdapter;
     private PendingIntent mPendingIntent;
@@ -78,6 +79,7 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
     @Override
     @SuppressLint("NewApi")
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -100,6 +102,11 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
         startupFragment = new StartupFragment();
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
+
+        mapFragment = new MapFragment.newInstance();
+        android.app.FragmentTransaction fragmentTransaction = getFragmentManager().beginTransaction();
+        fragmentTransaction.add(R.id.map, mapFragment);
+        fragmentTransaction.commit();
     }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
@@ -438,6 +445,13 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
             tv.setText("");
         }
         active = isChecked;
+        MapFragment mp = (MapFragment) getFragmentManager().findFragmentById(R.id.map);
+        mp.getMapAsync(this);
+
+    }
+
+    public void onMapReady(GoogleMap map){
+        map.addMarker(new MarkerOptions().position(new LatLang(0, 0)).title("Marker Test"));
     }
 
     public List<Parameters> getSensors() {
