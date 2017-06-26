@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<manifest
-    xmlns:tools="http://schemas.android.com/tools"
+<manifest xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.sensors2.osc"
     android:installLocation="auto">
 
@@ -67,10 +67,5 @@
         </activity>
 
     <uses-sdk tools:overrideLibrary="org.sensors2.common,com.google.android.gms.all" />
-        <service android:name="net.sf.supercollider.android.ScService" >
-            <intent-filter>
-                <action android:name="supercollider.START_SERVICE" />
-            </intent-filter>
-        </service>
     </application>
 </manifest>

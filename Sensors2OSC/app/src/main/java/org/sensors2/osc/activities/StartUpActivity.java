@@ -55,6 +55,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.LatLng;
 
@@ -94,8 +95,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private SensorManager sensorManager;
     private PowerManager.WakeLock wakeLock;
     private boolean active;
+    private GoogleMap map;
+    private Marker marker;
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
+    private LatLng currentLocation;
     //    private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
     //   private ServiceConnection conn = new ScServiceConnection();
@@ -124,7 +128,14 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             double latitude = location.getLatitude();
             Toast.makeText(getApplicationContext(), "Lat::" + latitude, Toast.LENGTH_SHORT).show();
             Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
+            Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
+            currentLocation = new LatLng(latitude, longitude);
 
+        }
+        if(map != null) {
+            mapFragment.getMapAsync(this);
+            map.clear();
+            marker = map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location"));
         }
     }
 
@@ -322,7 +333,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         startupFragment = new StartupFragment();
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
-
 
         mapFragment = SupportMapFragment.newInstance();
         android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
@@ -638,21 +648,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         // We do not care about that
     }
 
-    /*
-    @Override
-    public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
-        if (isChecked) {
-            if (!this.wakeLock.isHeld()) {
-                this.wakeLock.acquire();
-            }
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        } else {
-            this.wakeLock.release();
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        }
-        active = isChecked;
-    }*/
-
     /* New version of onCheckedChanged event listener
     @author: Karishma Changlani
      */
@@ -661,10 +656,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         View view = compoundButton.getRootView();
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
         //TODO: Add GPS information to sensors
+
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
         for(SensorConfiguration sc : this.dispatcher.getSensorConfigurations()){
             sc.setSend(isChecked);
         }
@@ -682,12 +678,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             tv.setText("");
         }
         active = isChecked;
-        mapFragment.getMapAsync(this);
 
     }
 
     public void onMapReady(GoogleMap map){
-        map.addMarker(new MarkerOptions().position(new LatLng(0, 0)).title("Marker Test"));
+        Log.d("Map", currentLocation.toString());
+        this.map = map;
+        marker = map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location"));
     }
 
     public List<Parameters> getSensors() {
