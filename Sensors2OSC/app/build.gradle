@@ -10,7 +10,7 @@ android {
     defaultConfig {
         applicationId 'org.sensors2.osc'
         targetSdkVersion 23
-        minSdkVersion 9
+        minSdkVersion 11
         versionCode 1
         versionName "0.1.0"
     }

@@ -19,6 +19,7 @@ import android.os.Bundle;
 import android.os.Parcelable;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
+import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
@@ -110,6 +111,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
 
+        setContentView(R.layout.activity_start_up_test);
         mapFragment = MapFragment.newInstance();
         android.app.FragmentTransaction fragmentTransaction = getFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
