@@ -29,6 +29,7 @@ import android.os.Parcelable;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.preference.PreferenceManager;
+import android.support.v4.app.Fragment;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
@@ -49,6 +50,14 @@ import android.widget.Toast;
 //import net.sf.supercollider.android.SuperColliderActivity;
 
 import com.google.android.gms.maps.model.LatLng;
+
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapFragment;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.LatLng;
+
 
 import org.sensors2.common.dispatch.DataDispatcher;
 import org.sensors2.common.dispatch.Measurement;
@@ -75,7 +84,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class StartUpActivity extends FragmentActivity implements SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener, LocationListener {
+public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener, LocationListener {
 
     final String LOG_LABEL = "Location Listener>>";
     private LocationManager locationManager;
@@ -86,6 +95,7 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
     private PowerManager.WakeLock wakeLock;
     private boolean active;
     private StartupFragment startupFragment;
+    private SupportMapFragment mapFragment;
     //    private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
     //   private ServiceConnection conn = new ScServiceConnection();
@@ -217,6 +227,7 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
     @Override
     @SuppressLint("NewApi")
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
         int permissionCheck = ContextCompat.checkSelfPermission(this,
                 Manifest.permission.RECORD_AUDIO);
@@ -311,6 +322,12 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
         startupFragment = new StartupFragment();
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
+
+
+        mapFragment = SupportMapFragment.newInstance();
+        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
+        fragmentTransaction.add(R.id.map, mapFragment);
+        fragmentTransaction.commit();
     }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
@@ -665,6 +682,12 @@ public class StartUpActivity extends FragmentActivity implements SensorActivity,
             tv.setText("");
         }
         active = isChecked;
+        mapFragment.getMapAsync(this);
+
+    }
+
+    public void onMapReady(GoogleMap map){
+        map.addMarker(new MarkerOptions().position(new LatLng(0, 0)).title("Marker Test"));
     }
 
     public List<Parameters> getSensors() {
