@@ -35,6 +35,7 @@ import android.widget.TextView;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.LatLng;
 
@@ -72,7 +73,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private PowerManager.WakeLock wakeLock;
     private boolean active;
     private StartupFragment startupFragment;
-    private MapFragment mapFragment;
+    private SupportMapFragment mapFragment;
 
     private NfcAdapter mAdapter;
     private PendingIntent mPendingIntent;
@@ -111,9 +112,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
 
-        setContentView(R.layout.activity_start_up_test);
-        mapFragment = MapFragment.newInstance();
-        android.app.FragmentTransaction fragmentTransaction = getFragmentManager().beginTransaction();
+
+        mapFragment = SupportMapFragment.newInstance();
+        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
     }
@@ -454,8 +455,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             tv.setText("");
         }
         active = isChecked;
-        MapFragment mp = (MapFragment) getFragmentManager().findFragmentById(R.id.map);
-        mp.getMapAsync(this);
+        mapFragment.getMapAsync(this);
 
     }
 
