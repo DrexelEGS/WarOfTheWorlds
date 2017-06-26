@@ -11,7 +11,7 @@
         android:label="@string/app_name"
         android:theme="@style/AppTheme">
         <meta-data
-            android:name="com.google.android.geo.AIzaSyDmTfZMFrDFVJcSwnStrSUdOAHeO4A6Ofg"
+            android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDmTfZMFrDFVJcSwnStrSUdOAHeO4A6Ofg"/>
         <meta-data
             android:name="com.google.android.gms.version"
@@ -65,5 +65,5 @@
         android:name="android.hardware.nfc"
         android:required="false" />
 
-    <uses-sdk tools:overrideLibrary="org.sensors2.common" />
+    <uses-sdk tools:overrideLibrary="org.sensors2.common,com.google.android.gms.all" />
 </manifest>

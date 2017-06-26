@@ -31,6 +31,13 @@ import android.view.WindowManager;
 import android.widget.CompoundButton;
 import android.widget.TextView;
 
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapFragment;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.LatLng;
+
+
 import org.sensors2.common.dispatch.DataDispatcher;
 import org.sensors2.common.dispatch.Measurement;
 import org.sensors2.common.nfc.NfcActivity;
@@ -103,7 +110,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
 
-        mapFragment = new MapFragment.newInstance();
+        mapFragment = MapFragment.newInstance();
         android.app.FragmentTransaction fragmentTransaction = getFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
@@ -451,7 +458,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     }
 
     public void onMapReady(GoogleMap map){
-        map.addMarker(new MarkerOptions().position(new LatLang(0, 0)).title("Marker Test"));
+        map.addMarker(new MarkerOptions().position(new LatLng(0, 0)).title("Marker Test"));
     }
 
     public List<Parameters> getSensors() {
