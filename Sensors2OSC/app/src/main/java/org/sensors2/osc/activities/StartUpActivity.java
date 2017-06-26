@@ -99,7 +99,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private Marker marker;
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
-    private LatLng currentLocation;
+    private LatLng currentLocation = new LatLng(0, 0);
     //    private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
     //   private ServiceConnection conn = new ScServiceConnection();
@@ -133,7 +133,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
         }
         if(map != null) {
-            mapFragment.getMapAsync(this);
             map.clear();
             marker = map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location"));
         }
@@ -338,6 +337,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
+
     }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
@@ -679,12 +679,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
         active = isChecked;
 
+        mapFragment.getMapAsync(this);
+
     }
 
     public void onMapReady(GoogleMap map){
-        Log.d("Map", currentLocation.toString());
         this.map = map;
-        marker = map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location"));
+        map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location"));
     }
 
     public List<Parameters> getSensors() {
