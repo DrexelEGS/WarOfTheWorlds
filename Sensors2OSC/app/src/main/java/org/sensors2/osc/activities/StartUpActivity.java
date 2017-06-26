@@ -1,13 +1,21 @@
 package org.sensors2.osc.activities;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.PendingIntent;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
@@ -16,13 +24,17 @@ import android.nfc.tech.MifareClassic;
 import android.nfc.tech.MifareUltralight;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Parcelable;
 import android.os.PowerManager;
+import android.os.RemoteException;
 import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -31,6 +43,13 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.CompoundButton;
 import android.widget.TextView;
+import android.widget.Toast;
+
+//import net.sf.supercollider.android.ISuperCollider;
+//import net.sf.supercollider.android.OscMessage;
+//import net.sf.supercollider.android.SuperColliderActivity;
+
+import com.google.android.gms.maps.model.LatLng;
 
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
@@ -56,6 +75,7 @@ import org.sensors2.osc.fragments.SensorFragment;
 import org.sensors2.osc.fragments.StartupFragment;
 import org.sensors2.osc.sensors.SensorDimensions;
 import org.sensors2.osc.sensors.Settings;
+import org.w3c.dom.Text;
 
 import java.lang.reflect.Array;
 import java.nio.charset.Charset;
@@ -64,8 +84,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener {
+public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener, LocationListener {
 
+    final String LOG_LABEL = "Location Listener>>";
+    private LocationManager locationManager;
     private Settings settings;
     private SensorCommunication sensorFactory;
     private OscDispatcher dispatcher;
@@ -74,6 +96,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private boolean active;
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
+    //    private ISuperCollider.Stub superCollider;
+    private TextView mainWidget = null;
+    //   private ServiceConnection conn = new ScServiceConnection();
 
     private NfcAdapter mAdapter;
     private PendingIntent mPendingIntent;
@@ -82,16 +107,202 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public Settings getSettings() {
         return this.settings;
     }
+
     public ArrayList<String> availableSensors = new ArrayList<>();
-    public  String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
+    public String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
+
+    @Override
+    public void onLocationChanged(Location location) {
+        TextView view = (TextView) this.findViewById(R.id.DisplayText);
+
+        Log.d("GPS", LOG_LABEL + "Location Changed");
+        if (location != null) {
+            view.append(Double.toString(location.getLatitude()));
+            double longitude = location.getLongitude();
+            Log.d("GPS", LOG_LABEL + "Longitude:" + longitude);
+            Toast.makeText(getApplicationContext(), "Long::" + longitude, Toast.LENGTH_SHORT).show();
+            double latitude = location.getLatitude();
+            Toast.makeText(getApplicationContext(), "Lat::" + latitude, Toast.LENGTH_SHORT).show();
+            Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
+
+        }
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
+    }
+
+ /*   private class ScServiceConnection implements ServiceConnection {
+        //@Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            StartUpActivity.this.superCollider = (ISuperCollider.Stub) service;
+            try {
+                // Kick off the supercollider playback routine
+                superCollider.start();
+                // Start a synth playing
+                superCollider.sendMessage(OscMessage.createSynthMessage("default", OscMessage.defaultNodeId, 0, 1));
+                setUpControls(); // now we have an audio engine, let the activity hook up its controls
+            } catch (RemoteException re) {
+                re.printStackTrace();
+            }
+        }
+        //@Override
+        public void onServiceDisconnected(ComponentName name) {
+
+        }
+    }*/
+
+    /**
+     * Provide the glue between the user's greasy fingers and the supercollider's shiny metal body
+     * Fix how this gets osc messages
+     */
+    /*
+    public void setUpControls() {
+        if (mainWidget!=null) mainWidget.setOnTouchListener(new View.OnTouchListener() {
+            //@Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (event.getAction()==MotionEvent.ACTION_UP) {
+                    // OSC message right here!
+                    OscMessage noteMessage = new OscMessage( new Object[] {
+                            "/n_set", OscMessage.defaultNodeId, "amp", 0f
+                    });
+                    try {
+                        // Now send it over the interprocess link to SuperCollider running as a Service
+                        superCollider.sendMessage(noteMessage);
+                    } catch (RemoteException e) {
+                        Toast.makeText(
+                                StartUpActivity.this,
+                                "Failed to communicate with SuperCollider!",
+                                Toast.LENGTH_SHORT);
+                        e.printStackTrace();
+                    }
+                } else if ((event.getAction()==MotionEvent.ACTION_DOWN) || (event.getAction()==MotionEvent.ACTION_MOVE)) {
+                    float vol = 1f - event.getY()/mainWidget.getHeight();
+                    OscMessage noteMessage = new OscMessage( new Object[] {
+                            "/n_set", OscMessage.defaultNodeId, "amp", vol
+                    });
+                    //float freq = 150+event.getX();
+                    //0 to mainWidget.getWidth() becomes sane-ish range of midinotes:
+                    float midinote = event.getX() * (70.f / mainWidget.getWidth()) + 28.f;
+                    float freq = sc_midicps(Math.round(midinote));
+                    OscMessage pitchMessage = new OscMessage( new Object[] {
+                            "/n_set", OscMessage.defaultNodeId, "freq", freq
+                    });
+                    try {
+                        superCollider.sendMessage(noteMessage);
+                        superCollider.sendMessage(pitchMessage);
+                    } catch (RemoteException e) {
+                        Toast.makeText(
+                                StartUpActivity.this,
+                                "Failed to communicate with SuperCollider!",
+                                Toast.LENGTH_SHORT);
+                        e.printStackTrace();
+                    }
+                }
+                return true;
+            }
+        });
+        try {
+            superCollider.openUDP(57110);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+    }*/
+
+    float sc_midicps(float note) {
+        return (float) (440.0 * Math.pow((float) 2., (note - 69.0) * (float) 0.083333333333));
+    }
 
     @Override
     @SuppressLint("NewApi")
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        int permissionCheck = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.RECORD_AUDIO);
+        // Here, thisActivity is the current activity
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
 
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.RECORD_AUDIO)) {
+
+                /* TODO: Show an explanation to the user *asynchronously* -- don't block
+                  this thread waiting for the user's response! After the user
+                  sees the explanation, try again to request the permission. */
+
+            } else {
+
+                // No explanation needed
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.RECORD_AUDIO}, 1);
+            }
+        }
+
+        int permissionCheckloc = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION);
+        // Here, thisActivity is the current activity
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.ACCESS_FINE_LOCATION)) {
+
+                /* TODO: Show an explanation to the user *asynchronously* -- don't block
+                  this thread waiting for the user's response! After the user
+                  sees the explanation, try again to request the permission. */
+
+            } else {
+
+                // No explanation needed
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1
+                );
+            }
+        }
+
+        int permissionCheckcoarse = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_COARSE_LOCATION);
+        // Here, thisActivity is the current activity
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.ACCESS_COARSE_LOCATION)) {
+
+                /* TODO: Show an explanation to the user *asynchronously* -- don't block
+                  this thread waiting for the user's response! After the user
+                  sees the explanation, try again to request the permission. */
+
+            } else {
+
+                // No explanation needed
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 1
+                );
+            }
+        }
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        setContentView(R.layout.activity_main);
+        //mainWidget = new TextView(this); //TODO: Find a way to get rid of this
+        //      bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
         this.settings = this.loadSettings();
         this.dispatcher = new OscDispatcher();
         this.sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -102,8 +313,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             mAdapter = NfcAdapter.getDefaultAdapter(this);
             mPendingIntent = PendingIntent.getActivity(this, 0,
                     new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0);
-            mNdefPushMessage = new NdefMessage(new NdefRecord[] { newTextRecord(
-                    "Message from NFC Reader :-)", Locale.ENGLISH, true) });
+            mNdefPushMessage = new NdefMessage(new NdefRecord[]{newTextRecord(
+                    "Message from NFC Reader :-)", Locale.ENGLISH, true)});
         }
 
         FragmentManager fm = getSupportFragmentManager();
@@ -172,8 +383,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 byte[] id = intent.getByteArrayExtra(NfcAdapter.EXTRA_ID);
                 byte[] payload = new byte[0];
                 NdefRecord record = new NdefRecord(NdefRecord.TNF_UNKNOWN, empty, id, payload);
-                NdefMessage msg = new NdefMessage(new NdefRecord[] { record });
-                msgs = new NdefMessage[] { msg };
+                NdefMessage msg = new NdefMessage(new NdefRecord[]{record});
+                msgs = new NdefMessage[]{msg};
 //                msgs = new NdefMessage[rawMsgs.length];
 //                for (int i = 1; i <= rawMsgs.length; i++) {
 //                    msgs[i] = (NdefMessage) rawMsgs[i-1];
@@ -185,11 +396,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 Parcelable tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
                 byte[] payload = dumpTagData(tag).getBytes();
                 NdefRecord record = new NdefRecord(NdefRecord.TNF_UNKNOWN, empty, id, payload);
-                NdefMessage msg = new NdefMessage(new NdefRecord[] { record });
-                msgs = new NdefMessage[] { msg };
+                NdefMessage msg = new NdefMessage(new NdefRecord[]{record});
+                msgs = new NdefMessage[]{msg};
             }
             // Setup the views
-            for(NdefMessage msg: msgs) {
+            for (NdefMessage msg : msgs) {
                 if (active) {
                     this.sensorFactory.dispatch(msg);
                 }
@@ -398,6 +609,19 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
     }
 
+    @Override
+    @SuppressLint("NewApi")
+    protected void onStop() {
+        super.onStop();
+        try {
+            // Free up audio when the activity is not in the foreground
+            // if (superCollider!=null) superCollider.stop();
+            this.finish();
+        } catch (Exception re) {
+            re.printStackTrace();
+        }
+    }
+
     public void addSensorFragment(SensorFragment sensorFragment) {
         this.dispatcher.addSensorConfiguration(sensorFragment.getSensorConfiguration());
     }
@@ -434,10 +658,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
      */
     @Override
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
-        View view= compoundButton.getRootView();
-        TextView tv = (TextView)view.findViewById(R.id.DisplayText);
-        //TODO: Send information from the desired sensors
-        //TODO: Set sensor configuration before entering this function
+        View view = compoundButton.getRootView();
+        TextView tv = (TextView) view.findViewById(R.id.DisplayText);
+        //TODO: Add GPS information to sensors
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
         for(SensorConfiguration sc : this.dispatcher.getSensorConfigurations()){
             sc.setSend(isChecked);
         }

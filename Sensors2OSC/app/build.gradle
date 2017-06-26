@@ -38,5 +38,6 @@ dependencies {
     compile 'com.android.support:support-v4:23.0.0'
     compile 'com.google.android.gms:play-services:9.2.0'
     compile 'com.github.SensorApps:Common:75898832fe'
-    compile project(':SuperCollider-aar')
+    compile 'com.google.android.gms:play-services:7.0.0'
+    androidTestCompile project(path: ':SuperCollider-library')
 }

@@ -28,7 +28,6 @@ public class StartupFragment extends Fragment {
     /*@Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View v = inflater.inflate(R.layout.activity_start_up, container, false);
-
         activeButton = (CompoundButton) v.findViewById(R.id.active);
         StartUpActivity activity = (StartUpActivity) getActivity();
         activeButton.setOnCheckedChangeListener(activity);
@@ -75,6 +74,7 @@ public class StartupFragment extends Fragment {
                     }
                 }
             }
+            //TODO: GPS data dispatcher
         }
         activeButton.setOnCheckedChangeListener(activity);
         return v;

@@ -29,7 +29,7 @@ public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
         super(Application.class);
     }
 
-    protected static final String TAG = "NativeAudioTests";
+    protected static final String TAG = "SuperCollAsLibraryTest";
     final int numInChans = 1;
     final int numOutChans = 1;
     final int shortsPerSample = 1;
@@ -47,10 +47,13 @@ public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
                 ScService.dllDirStr, ScService.dataDirStr);
         assert(true); // SC started, have a biscuit
 
-        ///////////////////////////////////////////////////////////////////////
         // Silence is golden
-        assert(0==SCAudio.scsynth_android_genaudio(audioBuf));
-        for(short s : audioBuf) assert(s==0);
+        assert(SCAudio.scsynth_android_genaudio(audioBuf)==0);
+        for(short s : audioBuf){
+            if (BuildConfig.DEBUG && !(s == 0)){
+                throw new AssertionError();
+            }
+        };
 
         assert(true);
 
@@ -59,9 +62,8 @@ public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
         AudioTrack audioTrack = createAudioOut(); // audible testing
         try {
 
-            ///////////////////////////////////////////////////////////////////////
-            // test default.scsyndef
-            SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "default", OscMessage.defaultNodeId});
+            // test test.scsyndef
+            SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "test", OscMessage.defaultNodeId});
 
             for(int i=0; i<buffersPerSecond; ++i) {
                 SCAudio.scsynth_android_genaudio(audioBuf);
@@ -70,7 +72,6 @@ public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
 
             assert(true);
 
-            ///////////////////////////////////////////////////////////////////////
             // Test buffers
             SCAudio.scsynth_android_doOsc(new Object[] {"n_free", OscMessage.defaultNodeId});
             int bufferIndex = 10;
@@ -88,7 +89,6 @@ public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
         } finally {
             audioTrack.stop();
         }
-
         if (!SCAudio.hasMessages()) assert(false);
     }
 
