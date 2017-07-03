@@ -327,6 +327,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     "Message from NFC Reader :-)", Locale.ENGLISH, true)});
         }
 
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
+
         FragmentManager fm = getSupportFragmentManager();
         FragmentTransaction transaction = fm.beginTransaction();
         startupFragment = new StartupFragment();
@@ -337,7 +339,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
-
     }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
