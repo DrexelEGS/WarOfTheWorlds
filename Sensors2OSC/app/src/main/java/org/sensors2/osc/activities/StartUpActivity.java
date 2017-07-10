@@ -49,6 +49,8 @@ import android.widget.Toast;
 //import net.sf.supercollider.android.OscMessage;
 //import net.sf.supercollider.android.SuperColliderActivity;
 
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 
 import com.google.android.gms.maps.GoogleMap;
@@ -100,6 +102,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
     private LatLng currentLocation = new LatLng(0, 0);
+    private LatLng targetLocation  = new LatLng(39, -75);
     //    private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
     //   private ServiceConnection conn = new ScServiceConnection();
@@ -132,10 +135,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             currentLocation = new LatLng(latitude, longitude);
 
         }
-        if(map != null) {
-            map.clear();
-            marker = map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location"));
-        }
+        mapFragment.getMapAsync(this);
     }
 
     @Override
@@ -327,8 +327,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     "Message from NFC Reader :-)", Locale.ENGLISH, true)});
         }
 
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
-
         FragmentManager fm = getSupportFragmentManager();
         FragmentTransaction transaction = fm.beginTransaction();
         startupFragment = new StartupFragment();
@@ -339,6 +337,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
+
+
     }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
@@ -681,12 +681,21 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         active = isChecked;
 
         mapFragment.getMapAsync(this);
-
     }
 
     public void onMapReady(GoogleMap map){
-        this.map = map;
-        map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location"));
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
+        if(this.map == null){
+            this.map = map;
+            map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
+        }
+        else {
+            map.clear();
+            map.addMarker(new MarkerOptions().position(targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+            map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
+        }
+
     }
 
     public List<Parameters> getSensors() {
