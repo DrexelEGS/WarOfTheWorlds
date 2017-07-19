@@ -102,7 +102,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
     private LatLng currentLocation = new LatLng(0, 0);
-    private LatLng targetLocation  = new LatLng(39, -75);
+    private LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
+    private LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
+    private LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
+    private LatLng targetLocation  = exciteLocation;
     //    private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
     //   private ServiceConnection conn = new ScServiceConnection();
