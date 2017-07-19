@@ -101,8 +101,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private Marker marker;
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
-    private LatLng currentLocation = new LatLng(0, 0);
     private LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
+    private LatLng currentLocation = exciteLocation;
     private LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
     private LatLng targetLocation  = exciteLocation;
@@ -135,7 +135,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Toast.makeText(getApplicationContext(), "Lat::" + latitude, Toast.LENGTH_SHORT).show();
             Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
             Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
-            currentLocation = new LatLng(latitude, longitude);
+            if((latitude > 39 && latitude < 41) && (longitude > -76 && longitude < -74))
+                currentLocation = new LatLng(latitude, longitude);
         }
         mapFragment.getMapAsync(this);
     }
