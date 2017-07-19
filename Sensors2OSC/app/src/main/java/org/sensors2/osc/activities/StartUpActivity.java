@@ -133,7 +133,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
             Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
             currentLocation = new LatLng(latitude, longitude);
-
         }
         mapFragment.getMapAsync(this);
     }
@@ -656,9 +655,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         View view = compoundButton.getRootView();
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
+        //TODO: Fix body sensors
         //TODO: Add GPS information to sensors
 
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
@@ -674,17 +673,17 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             for(String s:availableSensors){
                 tv.append(s + "\n");
             }
+            mapFragment.getMapAsync(this);
         }
         else{
             tv.setText("");
         }
         active = isChecked;
-
-        mapFragment.getMapAsync(this);
     }
 
     public void onMapReady(GoogleMap map){
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
+        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, this);
         if(this.map == null){
             this.map = map;
             map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
@@ -694,6 +693,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             map.clear();
             map.addMarker(new MarkerOptions().position(targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
             map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
         }
 
     }
