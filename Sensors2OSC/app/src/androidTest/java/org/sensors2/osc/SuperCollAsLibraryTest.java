@@ -3,12 +3,6 @@ package org.sensors2.osc;
 import android.app.Application;
 import android.test.ApplicationTestCase;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-
 import net.sf.supercollider.android.OscMessage;
 import net.sf.supercollider.android.SCAudio;
 import net.sf.supercollider.android.ScService;
@@ -75,8 +69,8 @@ public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
             // Test buffers
             SCAudio.scsynth_android_doOsc(new Object[] {"n_free", OscMessage.defaultNodeId});
             int bufferIndex = 10;
-            SCAudio.scsynth_android_doOsc(new Object[] {"b_allocRead", bufferIndex, "/sdcard/supercollider/sounds/a11wlk01.wav"});
-            SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "tutor", OscMessage.defaultNodeId});
+            SCAudio.scsynth_android_doOsc(new Object[] {"b_allocRead", bufferIndex, ScService.soundsDirStr + "/a11wlk01.wav"});
+            //SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "tutor", OscMessage.defaultNodeId});
 
             for(int i=0; i<buffersPerSecond; ++i) {
                 SCAudio.scsynth_android_genaudio(audioBuf);
@@ -112,31 +106,14 @@ public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
         return audioTrack;
     }
 
-    protected void pipeFile(String assetName, String targetDir) throws IOException {
-        InputStream is = getContext().getAssets().open(assetName);
-        OutputStream os = new FileOutputStream(targetDir+"/"+assetName);
-        byte[] buf = new byte[1024];
-        int bytesRead = 0;
-        while (-1 != (bytesRead = is.read(buf))) {
-            os.write(buf,0,bytesRead);
-        }
-        is.close();
-        os.close();
-    }
-
-    // For a fresh install, make sure we have our test synthdefs and
-    // samples to hand.
+    // For a fresh install, make sure we have our test synthdefs and samples to hand.
     protected boolean initFiles() {
         try {
-            File dataDir = new File(ScService.dataDirStr);
-            dataDir.mkdirs();
-            pipeFile("default.scsyndef",ScService.dataDirStr);
-            pipeFile("tutor.scsyndef",ScService.dataDirStr);
-            pipeFile("ffttest.scsyndef",ScService.dataDirStr);
-            String soundDirStr = "/sdcard/supercollider/sounds";
-            File soundDir = new File(soundDirStr);
-            soundDir.mkdirs();
-            pipeFile("a11wlk01.wav",soundDirStr);
+            ScService.initDataDir(ScService.dataDirStr);
+            ScService.deliverDataFile(getContext(), "default.scsyndef", ScService.dataDirStr);
+            ScService.deliverDataFile(getContext(), "test.scsyndef", ScService.dataDirStr);
+            ScService.initDataDir(ScService.soundsDirStr);
+            ScService.deliverDataFile(getContext(), "a11wlk01.wav", ScService.soundsDirStr);
         } catch (Exception e) {
             e.printStackTrace();
             return false;

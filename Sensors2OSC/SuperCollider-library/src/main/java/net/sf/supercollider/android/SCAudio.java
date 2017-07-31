@@ -67,23 +67,21 @@ public class SCAudio extends Thread {
 	public static native OscMessage scsynth_android_getMessage();
 	public static native void scsynth_android_quit();
     
-	public SCAudio(String dllDirStr){
-		this(1,dllDirStr);
+	public SCAudio(String pluginsDir, String synthDefsDir){
+		this(1, pluginsDir, synthDefsDir);
 	}
-	public SCAudio(int numInChans,String dllDirStr){
+	public SCAudio(int numInChans, String pluginsDir, String synthDefsDir){
 		this.numInChans = numInChans;
 		Log.i(TAG, "SCAudio - about to invoke native scsynth_android_initlogging()");
 		scsynth_android_initlogging();
-
-		Log.i(TAG, "SCAudio - data dir is " + ScService.dataDirStr);
+		Log.i(TAG, "SCAudio - synthDefs dir is " + synthDefsDir);
 		int result = 0xdead;
 		try {
 			result = scsynth_android_start(sampleRateInHz, bufSizeFrames, numInChans, numOutChans, shortsPerSample, 
-					dllDirStr, ScService.dataDirStr);
+					pluginsDir, synthDefsDir);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-				
 		Log.i(TAG, "SCAudio - result of scsynth_android_start() is " + result);
 	}
 	
