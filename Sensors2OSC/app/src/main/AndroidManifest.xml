@@ -19,6 +19,7 @@
     <uses-feature
         android:name="android.hardware.nfc"
         android:required="false" />
+    <uses-sdk tools:overrideLibrary="org.sensors2.common,com.google.android.gms.all" />
     <application
         android:allowBackup="true"
         android:icon="@drawable/wotw_header"
@@ -69,6 +70,5 @@
                 android:value=".activities.StartUpActivity" />
         </activity>
 
-    <uses-sdk tools:overrideLibrary="org.sensors2.common,com.google.android.gms.all" />
     </application>
 </manifest>
