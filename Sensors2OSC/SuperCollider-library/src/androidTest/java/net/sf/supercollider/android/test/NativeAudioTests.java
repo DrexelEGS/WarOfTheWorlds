@@ -1,6 +1,7 @@
 package net.sf.supercollider.android.test;
 
 import java.io.File;
+import java.util.Arrays;
 
 import net.sf.supercollider.android.OscMessage;
 import net.sf.supercollider.android.SCAudio;
@@ -133,11 +134,21 @@ public class NativeAudioTests {
 			String[] filesInDir;
 			other = getContext().getFilesDir();
 			Log.d("initFiles", "checking getFilesDir " + other + " exists: " + other.exists());
-			Log.d("initFiles", "listing dir contents " + other.list());
+			Log.d("initFiles", "listing dir contents " + Arrays.toString(other.list()));
 			Log.d("initFiles", "test create: " + new File(other, "testing").createNewFile());
 			Log.d("initFiles", "test delete: " + new File(other, "testing").delete());
 			// Note: using a non-bound Service (such as a hand-created ScService) as context
 			// fails when calling getFilesDir()
+
+            other = other.getParentFile();
+            Log.d("initFiles", "checking getFilesDir.parent " + other + " exists: " + other.exists());
+            Log.d("initFiles", "listing dir contents " + Arrays.toString(other.list()));
+            Log.d("initFiles", "test create: " + new File(other, "testing").createNewFile());
+            Log.d("initFiles", "test delete: " + new File(other, "testing").delete());
+
+			other = new File(other, "lib");
+			Log.d("initFiles", "checking getFilesDir.parent/lib " + other + " exists: " + other.exists());
+			Log.d("initFiles", "listing dir contents " + Arrays.toString(other.list()));
 
 			String synthDefsDirStr = ScService.getSynthDefsDirStr(getContext());
 			File dir = new File(synthDefsDirStr);
@@ -151,7 +162,7 @@ public class NativeAudioTests {
 			ScService.deliverDataFile(getContext(), "default.scsyndef", synthDefsDirStr);
             Log.d("initFiles", "copied default.scsyndef to " + synthDefsDirStr);
             filesInDir = new File(synthDefsDirStr).list();
-            Log.d("initFiles", "listing dir contents " + filesInDir);
+            Log.d("initFiles", "listing dir contents " + Arrays.toString(filesInDir));
 
 			String soundsDirStr = ScService.getSoundsDirStr(getContext());
             Log.d("initFiles", "creating " + soundsDirStr);
