@@ -60,11 +60,11 @@ public class NativeAudioTests {
 	public void testSynthDefs() {
 		int permissionCheck = ContextCompat.checkSelfPermission(getContext(),
 				Manifest.permission.WRITE_EXTERNAL_STORAGE);
-		Log.d("initFiles", "permission external write: " + (permissionCheck == PackageManager.PERMISSION_GRANTED));
+		Log.d(TAG, "permission external write (not actually needed above sdk 23): "
+				+ (permissionCheck == PackageManager.PERMISSION_GRANTED));
 		//assertEquals("Permission not granted!", permissionCheck, PackageManager.PERMISSION_GRANTED);
 		boolean retValBool = initFiles();
 		assertTrue("initFiles failed!", retValBool);
-        Log.d("initFiles", "completed");
     	System.loadLibrary("sndfile");
     	System.loadLibrary("scsynth"); 
     	SCAudio.scsynth_android_initlogging();
@@ -130,44 +130,20 @@ public class NativeAudioTests {
 	// For a fresh install, make sure we have our test synthdefs and samples to hand.
 	protected boolean initFiles() {
 		try {
-			File other;
-			String[] filesInDir;
-			other = getContext().getFilesDir();
-			Log.d("initFiles", "checking getFilesDir " + other + " exists: " + other.exists());
-			Log.d("initFiles", "listing dir contents " + Arrays.toString(other.list()));
-			Log.d("initFiles", "test create: " + new File(other, "testing").createNewFile());
-			Log.d("initFiles", "test delete: " + new File(other, "testing").delete());
-			// Note: using a non-bound Service (such as a hand-created ScService) as context
-			// fails when calling getFilesDir()
-
-            other = other.getParentFile();
-            Log.d("initFiles", "checking getFilesDir.parent " + other + " exists: " + other.exists());
-            Log.d("initFiles", "listing dir contents " + Arrays.toString(other.list()));
-            Log.d("initFiles", "test create: " + new File(other, "testing").createNewFile());
-            Log.d("initFiles", "test delete: " + new File(other, "testing").delete());
-
-			other = new File(other, "lib");
-			Log.d("initFiles", "checking getFilesDir.parent/lib " + other + " exists: " + other.exists());
-			Log.d("initFiles", "listing dir contents " + Arrays.toString(other.list()));
-
+			String fileToDeliver = "default.scsyndef";
 			String synthDefsDirStr = ScService.getSynthDefsDirStr(getContext());
-			File dir = new File(synthDefsDirStr);
-			String dataDir = dir.getAbsolutePath();
-            Log.d("initFiles", "creating " + dataDir + " exists: " + dir.exists());
-			Log.d("initFiles", "parent " + dir.getParent() + " exists: " + dir.getParentFile().exists());
-			dir.getParentFile().mkdir();
-			dir.getParentFile().createNewFile();
-			Log.d("initFiles", "paparent " + dir.getParentFile().getParent() + " exists: " + dir.getParentFile().getParentFile().exists());
-            ScService.initDataDir(dataDir);
-			ScService.deliverDataFile(getContext(), "default.scsyndef", synthDefsDirStr);
-            Log.d("initFiles", "copied default.scsyndef to " + synthDefsDirStr);
-            filesInDir = new File(synthDefsDirStr).list();
-            Log.d("initFiles", "listing dir contents " + Arrays.toString(filesInDir));
-
+			ScService.initDataDir(synthDefsDirStr);
+			ScService.deliverDataFile(getContext(), fileToDeliver, synthDefsDirStr);
+			assertTrue("Failed copying " + fileToDeliver,
+					Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToDeliver));
+			Log.d("initFiles", "copied " + fileToDeliver + " to " + synthDefsDirStr);
+			fileToDeliver = "a11wlk01.wav";
 			String soundsDirStr = ScService.getSoundsDirStr(getContext());
-            Log.d("initFiles", "creating " + soundsDirStr);
 			ScService.initDataDir(soundsDirStr);
-			ScService.deliverDataFile(getContext(), "a11wlk01.wav", soundsDirStr);
+			ScService.deliverDataFile(getContext(), fileToDeliver, soundsDirStr);
+			assertTrue("Failed copying " + fileToDeliver,
+					Arrays.asList(new File(soundsDirStr).list()).contains(fileToDeliver));
+			Log.d("initFiles", "copied " + fileToDeliver + " to " + soundsDirStr);
 		} catch (Exception e) {
 			e.printStackTrace();
 			return false;
