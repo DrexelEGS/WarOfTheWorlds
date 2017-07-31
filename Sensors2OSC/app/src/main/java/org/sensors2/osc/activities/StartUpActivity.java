@@ -45,9 +45,8 @@ import android.widget.CompoundButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
-//import net.sf.supercollider.android.ISuperCollider;
-//import net.sf.supercollider.android.OscMessage;
-//import net.sf.supercollider.android.SuperColliderActivity;
+import net.sf.supercollider.android.ISuperCollider;
+import net.sf.supercollider.android.OscMessage;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -106,9 +105,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
     private LatLng targetLocation  = curioTheatreLocation;
-    //    private ISuperCollider.Stub superCollider;
+    private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
-    //   private ServiceConnection conn = new ScServiceConnection();
+    private ServiceConnection conn = new ScServiceConnection();
 
     private NfcAdapter mAdapter;
     private PendingIntent mPendingIntent;
@@ -156,7 +155,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     }
 
- /*   private class ScServiceConnection implements ServiceConnection {
+    private class ScServiceConnection implements ServiceConnection {
         //@Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             StartUpActivity.this.superCollider = (ISuperCollider.Stub) service;
@@ -174,13 +173,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         public void onServiceDisconnected(ComponentName name) {
 
         }
-    }*/
+    }
 
     /**
      * Provide the glue between the user's greasy fingers and the supercollider's shiny metal body
      * Fix how this gets osc messages
      */
-    /*
     public void setUpControls() {
         if (mainWidget!=null) mainWidget.setOnTouchListener(new View.OnTouchListener() {
             //@Override
@@ -231,7 +229,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         } catch (RemoteException e) {
             e.printStackTrace();
         }
-    }*/
+    }
 
     float sc_midicps(float note) {
         return (float) (440.0 * Math.pow((float) 2., (note - 69.0) * (float) 0.083333333333));
@@ -315,7 +313,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         setContentView(R.layout.activity_main);
         //mainWidget = new TextView(this); //TODO: Find a way to get rid of this
-        //      bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
+        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
         this.settings = this.loadSettings();
         this.dispatcher = new OscDispatcher();
         this.sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
