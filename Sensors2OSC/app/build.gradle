@@ -5,14 +5,15 @@ android {
         config {
         }
     }
-    compileSdkVersion 23
-    buildToolsVersion '25.0.0'
+    compileSdkVersion 26
+    buildToolsVersion '25.0.2'
     defaultConfig {
         applicationId 'org.sensors2.osc'
         targetSdkVersion 23
-        minSdkVersion 11
+        minSdkVersion 23
         versionCode 1
         versionName "0.1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         release {
@@ -35,8 +36,16 @@ android {
 dependencies {
     compile 'com.illposed.osc:javaosc-core:0.3'
     compile 'org.apmem.tools:layouts:1.9@aar'
-    compile 'com.android.support:support-v4:23.0.0'
-    compile 'com.google.android.gms:play-services:9.2.0'
+    compile 'com.android.support:support-core-utils:26.0.0'
+    compile 'com.google.android.gms:play-services:11.0.4'
+
     compile 'com.github.SensorApps:Common:75898832fe'
-    androidTestCompile project(path: ':SuperCollider-library')
+
+    compile 'net.sf.supercollider.android:SuperCollider-library-debug:1@aar'
+
+    androidTestCompile 'com.android.support:support-core-utils:26.0.0'
+    androidTestCompile 'com.android.support.test:runner:1.0.0'
+    androidTestCompile 'com.android.support.test:rules:1.0.0'
+    androidTestCompile 'com.android.support.test.espresso:espresso-core:3.0.0'
+    androidTestCompile 'junit:junit:4.12'
 }

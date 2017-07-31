@@ -4,16 +4,16 @@ android {
         config {
         }
     }
-    compileSdkVersion 23
+    compileSdkVersion 26
     buildToolsVersion "25.0.2"
     defaultConfig {
-        minSdkVersion 8
-        targetSdkVersion 8
+        minSdkVersion 23
+        targetSdkVersion 23
         ndk {
             moduleName "scsynth"
         }
         testApplicationId "net.sf.supercollider.android.test"
-        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         release {
@@ -33,4 +33,16 @@ android {
 }
 
 dependencies {
+    androidTestCompile 'com.android.support:support-core-utils:26.0.0'
+    androidTestCompile 'com.android.support.test:runner:1.0.0'
+    androidTestCompile 'com.android.support.test:rules:1.0.0'
+    androidTestCompile 'com.android.support.test.espresso:espresso-core:3.0.0'
+    androidTestCompile 'junit:junit:4.12'
+}
+
+task copyAAR(type: Copy) {
+    from('build/outputs/aar')
+    into('../app/libs')
+    include(project.name + '-debug.aar')
+    include(project.name + '-release.aar')
 }

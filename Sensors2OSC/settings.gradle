@@ -1,1 +1,1 @@
-include ':app', 'SuperCollider-library', ':SuperCollider-aar'
+include ':app', 'SuperCollider-library'
