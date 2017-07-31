@@ -1,119 +1,95 @@
 package org.sensors2.osc;
 
-import android.app.Application;
-import android.test.ApplicationTestCase;
+import android.content.Context;
+import android.content.Intent;
+import android.os.IBinder;
+import android.os.RemoteException;
+import android.support.test.InstrumentationRegistry;
+import android.support.test.rule.ServiceTestRule;
+import android.support.test.runner.AndroidJUnit4;
+import android.util.Log;
 
+import net.sf.supercollider.android.ISuperCollider;
 import net.sf.supercollider.android.OscMessage;
 import net.sf.supercollider.android.SCAudio;
 import net.sf.supercollider.android.ScService;
 
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioTrack;
-import android.test.AndroidTestCase;
-import android.util.Log;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
+import java.io.File;
+import java.util.Arrays;
+import java.util.concurrent.TimeoutException;
+
+import static org.junit.Assert.assertTrue;
 
 /**
- * Trying to replicate a minimal test from the Supercollider NativeAudioTests, so that
- * we can make sure that importing and using SC code from the main app will work.
+ * Quick test to make sure using the ScService gives the same results as
+ * tested for in NativeAudioTest.
+ *
+ * You can also use this code as an example for interacting with the ScService
+ *
+ * @author strank
+ *
  */
-public class SuperCollAsLibraryTest extends ApplicationTestCase<Application> {
-    public SuperCollAsLibraryTest() {
-        super(Application.class);
-    }
+
+@RunWith(AndroidJUnit4.class)
+public class SuperCollAsLibraryTest {
 
     protected static final String TAG = "SuperCollAsLibraryTest";
-    final int numInChans = 1;
-    final int numOutChans = 1;
-    final int shortsPerSample = 1;
-    final int bufSizeFrames = 64*16;
-    final int bufSizeShorts = bufSizeFrames * numOutChans * shortsPerSample;
-    int sampleRateInHz = 11025;
-    short[] audioBuf = new short[bufSizeShorts];
 
-    public void testSynthDefs() {
-        initFiles();
-        System.loadLibrary("sndfile");
-        System.loadLibrary("scsynth");
-        SCAudio.scsynth_android_initlogging();
-        SCAudio.scsynth_android_start(sampleRateInHz, bufSizeFrames, numInChans, numOutChans, shortsPerSample,
-                ScService.dllDirStr, ScService.dataDirStr);
-        assert(true); // SC started, have a biscuit
+    @Rule
+    public final ServiceTestRule serviceRule = new ServiceTestRule();
 
-        // Silence is golden
-        assert(SCAudio.scsynth_android_genaudio(audioBuf)==0);
-        for(short s : audioBuf){
-            if (BuildConfig.DEBUG && !(s == 0)){
-                throw new AssertionError();
-            }
-        };
+    private Context context;
 
-        assert(true);
-
-        int buffersPerSecond = (sampleRateInHz*shortsPerSample)/(bufSizeShorts*numOutChans);
-
-        AudioTrack audioTrack = createAudioOut(); // audible testing
+    @Test
+    public void testScServiceFromApp() throws TimeoutException {
+        context = InstrumentationRegistry.getTargetContext();
+        // Create the service Intent.
+        Intent serviceIntent = new Intent(context, ScService.class);
+        // Bind the service and grab a reference to the binder.
+        IBinder binder = serviceRule.bindService(serviceIntent);
+        Log.d(TAG, "Service bound: " + binder);
+        ISuperCollider.Stub servStub = (ISuperCollider.Stub) binder;
+        // Check the default file was copied:
+        String fileToCheck = "default.scsyndef";
+        String synthDefsDirStr = ScService.getSynthDefsDirStr(context);
+        assertTrue("Failed to find default file copied: " + fileToCheck,
+                Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
         try {
-
-            // test test.scsyndef
-            SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "test", OscMessage.defaultNodeId});
-
-            for(int i=0; i<buffersPerSecond; ++i) {
-                SCAudio.scsynth_android_genaudio(audioBuf);
-                audioTrack.write(audioBuf, 0, bufSizeShorts);
-            }
-
-            assert(true);
-
-            // Test buffers
-            SCAudio.scsynth_android_doOsc(new Object[] {"n_free", OscMessage.defaultNodeId});
+            // start it manually (which is unusual for bound services, but that seems to be necessary:
+            servStub.start();
+            // Check it's working:
+            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "default", OscMessage.defaultNodeId}));
+            Thread.sleep(1000);
+            servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
+            initWavFile();
             int bufferIndex = 10;
-            SCAudio.scsynth_android_doOsc(new Object[] {"b_allocRead", bufferIndex, ScService.soundsDirStr + "/a11wlk01.wav"});
-            //SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "tutor", OscMessage.defaultNodeId});
-
-            for(int i=0; i<buffersPerSecond; ++i) {
-                SCAudio.scsynth_android_genaudio(audioBuf);
-                audioTrack.write(audioBuf, 0, bufSizeShorts);
-            }
-
-            SCAudio.scsynth_android_doOsc(new Object[] {"n_free", OscMessage.defaultNodeId});
-            //SCAudio.scsynth_android_doOsc(new Object[] {"b_free", bufferIndex});
-            assert(true);
-        } finally {
-            audioTrack.stop();
+            servStub.sendMessage(new OscMessage(new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/a11wlk01.wav"}));
+            Thread.sleep(1000);
+            servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
+            //servStub.sendMessage(new OscMessage(new Object[] {"b_free", bufferIndex}));
+        } catch (RemoteException e) {
+            e.printStackTrace();
+            assertTrue("RemoteException caught!", false);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            assertTrue("InterruptedException caught!", false);
         }
-        if (!SCAudio.hasMessages()) assert(false);
+        assertTrue("SCAudio has no messages!", SCAudio.hasMessages());
     }
 
-    protected AudioTrack createAudioOut() {
-        @SuppressWarnings("all") // the ternary operator does not contain dead code
-                int channelConfiguration = numOutChans==2?
-                AudioFormat.CHANNEL_CONFIGURATION_STEREO
-                :AudioFormat.CHANNEL_CONFIGURATION_MONO;
-        int minSize = AudioTrack.getMinBufferSize(
-                sampleRateInHz,
-                channelConfiguration,
-                AudioFormat.ENCODING_PCM_16BIT);
-        AudioTrack audioTrack = new AudioTrack(
-                AudioManager.STREAM_MUSIC,
-                sampleRateInHz,
-                channelConfiguration,
-                AudioFormat.ENCODING_PCM_16BIT,
-                minSize,
-                AudioTrack.MODE_STREAM);
-        audioTrack.play();
-        return audioTrack;
-    }
-
-    // For a fresh install, make sure we have our test synthdefs and samples to hand.
-    protected boolean initFiles() {
+    protected boolean initWavFile() {
         try {
-            ScService.initDataDir(ScService.dataDirStr);
-            ScService.deliverDataFile(getContext(), "default.scsyndef", ScService.dataDirStr);
-            ScService.deliverDataFile(getContext(), "test.scsyndef", ScService.dataDirStr);
-            ScService.initDataDir(ScService.soundsDirStr);
-            ScService.deliverDataFile(getContext(), "a11wlk01.wav", ScService.soundsDirStr);
+            String fileToDeliver = "a11wlk01.wav";
+            String soundsDirStr = ScService.getSoundsDirStr(context);
+            ScService.initDataDir(soundsDirStr);
+            ScService.deliverDataFile(context, fileToDeliver, soundsDirStr);
+            assertTrue("Failed copying " + fileToDeliver,
+                    Arrays.asList(new File(soundsDirStr).list()).contains(fileToDeliver));
+            Log.d("initFiles", "copied " + fileToDeliver + " to " + soundsDirStr);
         } catch (Exception e) {
             e.printStackTrace();
             return false;
