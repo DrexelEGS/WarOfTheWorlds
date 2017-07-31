@@ -35,14 +35,14 @@ android {
 
 dependencies {
     compile 'com.illposed.osc:javaosc-core:0.3'
-    compile 'org.apmem.tools:layouts:1.9@aar'
+    compile 'org.apmem.tools:layouts:1.10@aar'
     compile 'com.android.support:support-core-utils:26.0.0'
-    compile 'com.google.android.gms:play-services:11.0.4'
-
+    compile 'com.android.support:support-v4:26.0.0'
+    compile 'com.google.android.gms:play-services-location:11.0.4'
+    compile 'com.google.android.gms:play-services-maps:11.0.4'
     compile 'com.github.SensorApps:Common:75898832fe'
-
-    compile 'net.sf.supercollider.android:SuperCollider-library-debug:1@aar'
-
+    debugCompile(name:'SuperCollider-library-debug', ext:'aar')
+    releaseCompile(name:'SuperCollider-library-release', ext:'aar')
     androidTestCompile 'com.android.support:support-core-utils:26.0.0'
     androidTestCompile 'com.android.support.test:runner:1.0.0'
     androidTestCompile 'com.android.support.test:rules:1.0.0'
