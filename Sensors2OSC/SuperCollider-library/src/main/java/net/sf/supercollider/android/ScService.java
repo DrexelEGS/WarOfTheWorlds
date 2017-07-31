@@ -119,16 +119,8 @@ public class ScService extends Service {
 		Log.e(SCAudio.TAG, errorMsg);
 	}
 
-	/* onStart is called for Android versions < 2.0, but onStartCommand is
-       called for Android 2.0 and above.  Anything which is generic to all
-       Android releases should be declared in onStart.  Any newer features
-       should be declared in onStartCommand.  Access new features using 
-       * reflection, to facilitate compilation to 1.5 and 1.6
-    */
     @Override
-    public void onStart(Intent intent, int startId) { }
     public int onStartCommand(Intent intent, int flags, int startId) {
-     	onStart(intent, startId);
         int START_STICKY = 1;
         try {
             // Android 2.1 API allows us to specify that this service is a foreground task
