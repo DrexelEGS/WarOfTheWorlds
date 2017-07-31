@@ -5,16 +5,16 @@ var run = true, sensor = 'orientation', ox = 0, ax, ay, av, getAngle, getDistanc
 // load buffer (adjust path as necessary)
 b.free;
 s.sync;
-b = Buffer.read(s, Document.current.dir ++ "/Sound Files/02 Mozart.wav",
+b = Buffer.read(s, Document.current.dir ++ "/02 Mozart.wav",
  action: {|buf|
 	 // smeared song
 	aSynth = {|smear = 30, amp = 0.5|
-	Ê Ê var in, chain, out;
-	Ê Ê in = PlayBuf.ar(2, buf.bufnum, BufRateScale.kr(buf.bufnum) * 0.5, loop: 1);
-	Ê Ê chain = FFT({ LocalBuf(2048, 1) }.dup, in);
-	Ê Ê chain = PV_MagSmear(chain, smear);
+	ï¿½ ï¿½ var in, chain, out;
+	ï¿½ ï¿½ in = PlayBuf.ar(2, buf.bufnum, BufRateScale.kr(buf.bufnum) * 0.5, loop: 1);
+	ï¿½ ï¿½ chain = FFT({ LocalBuf(2048, 1) }.dup, in);
+	ï¿½ ï¿½ chain = PV_MagSmear(chain, smear);
 	    out = IFFT(chain);
-	Ê Ê out = Splay.ar(PitchShift.ar(out, 0.2, smear.explin(0.33333, 50, 1, [0.6667, 1.18, 0.5, 1.25]), timeDispersion: { exprand(0.001, 0.05) }.dup(4)), levelComp: false);
+	ï¿½ ï¿½ out = Splay.ar(PitchShift.ar(out, 0.2, smear.explin(0.33333, 50, 1, [0.6667, 1.18, 0.5, 1.25]), timeDispersion: { exprand(0.001, 0.05) }.dup(4)), levelComp: false);
 	    GVerb.ar((out * amp * 8).softclip, 80, 4.85, 0.41, 0.19, -3.dbamp, -9.dbamp, -11.dbamp);
 	}.play;
 });
@@ -61,25 +61,25 @@ getAngleDiff = {|a1, a2|
 s.sync;
 
 // open the port(s) for OSC from Android
-thisProcess.openUDPPort(9000); 
+thisProcess.openUDPPort(9000);
 thisProcess.openPorts;
 
 Routine{
 	inf.do({
 		var userAngle = ox * 0.01745329252, alienAngle, diff, dist;
-		0.05.wait; 
+		0.05.wait;
 		ax = ax + av[0];
 		((ax > width) || (ax < 0)).if({
 			av[0] = av[0].neg;
-		});  
-		ay = ay + av[1]; 
+		});
+		ay = ay + av[1];
 		((ay > height) || (ay < 0)).if({
 			av[1] = av[1].neg;
-		}); 
+		});
 		av = av + { rrand(-0.2, 0.2) }.dup;
 		av = av * 0.99;
 		alienAngle = getAngle.value(ax, ay);
-	
+
 		// set synth values (amp and click rate) based on angle and distance
 		diff = pi - getAngleDiff.value(userAngle, alienAngle).abs;
 		dist = getDistance.value(ax, ay);
@@ -88,7 +88,7 @@ Routine{
 }.play;
 
 // handle incoming OSC messages
-OSCFunc.newMatching({|msg, time, addr, recvPort| 
+OSCFunc.newMatching({|msg, time, addr, recvPort|
 	ox = msg[1] - 180;
 	// ox.postln;
 }, sensor ++ '/X');
