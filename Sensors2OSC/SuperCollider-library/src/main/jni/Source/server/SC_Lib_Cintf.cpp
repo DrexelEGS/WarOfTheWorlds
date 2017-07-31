@@ -296,7 +296,7 @@ bool PlugIn_Load(const char *filename)
 
 	ptr = dlsym(handle, SC_PLUGIN_LOAD_SYM);
 	if (!ptr) {
-		scprintf("*** ERROR: dlsym %s err '%s'\n", SC_PLUGIN_LOAD_SYM, dlerror());
+		scprintf("*** ERROR: dlsym %s err '%s' for '%s'\n", SC_PLUGIN_LOAD_SYM, dlerror(), filename);
 		dlclose(handle);
 		return false;
 	}
