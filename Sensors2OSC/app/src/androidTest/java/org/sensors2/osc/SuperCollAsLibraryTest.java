@@ -54,7 +54,7 @@ public class SuperCollAsLibraryTest {
         Log.d(TAG, "Service bound: " + binder);
         ISuperCollider.Stub servStub = (ISuperCollider.Stub) binder;
         // Check the default file was copied:
-        String fileToCheck = "default.scsyndef";
+        String fileToCheck = "default_old.scsyndef";
         String synthDefsDirStr = ScService.getSynthDefsDirStr(context);
         assertTrue("Failed to find default file copied: " + fileToCheck,
                 Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));

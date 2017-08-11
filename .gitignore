@@ -67,7 +67,7 @@ Temporary Items
 bin/
 gen/
 out/
-
+.idea/
 # Gradle files
 .gradle/
 build/

@@ -47,6 +47,7 @@ import android.widget.Toast;
 
 import net.sf.supercollider.android.ISuperCollider;
 import net.sf.supercollider.android.OscMessage;
+import net.sf.supercollider.android.SCAudio;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -163,8 +164,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 // Kick off the supercollider playback routine
                 superCollider.start();
                 // Start a synth playing
-                superCollider.sendMessage(OscMessage.createSynthMessage("default", OscMessage.defaultNodeId, 0, 1));
+                //superCollider.sendMessage(OscMessage.createSynthMessage("default", OscMessage.defaultNodeId, 0, 1));
+                superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "not_default", OscMessage.defaultNodeId, 0, 1, "freq", 900}));
                 setUpControls(); // now we have an audio engine, let the activity hook up its controls
+                if(SCAudio.hasMessages()){
+                    OscMessage receivedMessage = SCAudio.getMessage();
+                    Log.d(receivedMessage.get(0).toString(), "scydef message");
+                }
             } catch (RemoteException re) {
                 re.printStackTrace();
             }
