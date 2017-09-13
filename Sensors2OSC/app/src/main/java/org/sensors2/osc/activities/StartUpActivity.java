@@ -178,6 +178,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 //transfer files
                 try {
                     ScService.deliverDataFile(StartUpActivity.this, "not_default.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
+                    ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
                 } catch (IOException e)
                 {
                     e.printStackTrace();
@@ -678,7 +679,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     /**/
     public void changeSynthAmp(){
         try {
-            ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
+            ScService.deliverDataFile(StartUpActivity.this, "amplitude.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
             superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", OscMessage.defaultNodeId}));
             Location current = LatLngTOLocation(currentLocation);
             Location target = LatLngTOLocation(targetLocation);
@@ -694,7 +695,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
 
             Log.d(Double.toString(amp), "Amplitude synth");
-            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "frequency", OscMessage.defaultNodeId, 0, 1, "amp", amp}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "amplitude", OscMessage.defaultNodeId, 0, 1, "amp", amp}));
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
             if(SCAudio.hasMessages()){
                 OscMessage receivedMessage = SCAudio.getMessage();
@@ -709,8 +710,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     public void changeSynthFreq(){
         try {
+            ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
             superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", OscMessage.defaultNodeId}));
-            Location current = LatLngTOLocation(currentLocation);
+            Location current = LatLngTOLocation(currentLocation)git;
             Location target = LatLngTOLocation(targetLocation);
 
             double distanceFt = current.distanceTo(target)/FEETINMETERS;
@@ -723,15 +725,16 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     freq = 800 - distanceFt; //a negative slope fuction to ensure smooth increase
             }
 
-
             Log.d(Double.toString(freq), "Frequency synth");
-            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "not_default", OscMessage.defaultNodeId, 0, 1, "freq", freq}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "frequency", OscMessage.defaultNodeId, 0, 1, "freq", freq}));
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
             if(SCAudio.hasMessages()){
                 OscMessage receivedMessage = SCAudio.getMessage();
                 Log.d(receivedMessage.get(0).toString(), "scydef message");
             }
         } catch (RemoteException e){
+            e.printStackTrace();
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
