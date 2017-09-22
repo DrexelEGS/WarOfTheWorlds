@@ -17,8 +17,10 @@ import net.sf.supercollider.android.ScService;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.sensors2.osc.activities.StartUpActivity;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.TimeoutException;
 
@@ -54,7 +56,13 @@ public class SuperCollAsLibraryTest {
         Log.d(TAG, "Service bound: " + binder);
         ISuperCollider.Stub servStub = (ISuperCollider.Stub) binder;
         // Check the default file was copied:
-        String fileToCheck = "default_old.scsyndef";
+
+        try {
+            ScService.deliverDataFile(context, "synth1.scsyndef", ScService.getSynthDefsDirStr(context));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        String fileToCheck = "synth1.scsyndef";
         String synthDefsDirStr = ScService.getSynthDefsDirStr(context);
         assertTrue("Failed to find default file copied: " + fileToCheck,
                 Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
@@ -68,7 +76,8 @@ public class SuperCollAsLibraryTest {
             initWavFile();
             int bufferIndex = 10;
             servStub.sendMessage(new OscMessage(new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/a11wlk01.wav"}));
-            Thread.sleep(1000);
+            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "synth1", OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex}));
+            Thread.sleep(3000);
             servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
             //servStub.sendMessage(new OscMessage(new Object[] {"b_free", bufferIndex}));
         } catch (RemoteException e) {

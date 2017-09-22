@@ -16,6 +16,7 @@ import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.media.MediaPlayer;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
@@ -92,6 +93,8 @@ import java.util.Map;
 public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener, LocationListener {
 
     final String LOG_LABEL = "Location Listener>>";
+    final int[] nodes= {1001, 1002, 1003, 1004, 1005, 1006};
+    int node_no;
     final double FEETINMETERS = 3.28;
     final double MAX_DISTANCE = 400;
     final double MIN_DISTANCE = 10;
@@ -143,6 +146,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             if((latitude > 39 && latitude < 41) && (longitude > -76 && longitude < -74))
                 currentLocation = new LatLng(latitude, longitude);
         }
+
         changeSynthFreq();
         mapFragment.getMapAsync(this);
     }
@@ -179,6 +183,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 try {
                     ScService.deliverDataFile(StartUpActivity.this, "not_default.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
                     ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
+                    ScService.deliverDataFile(StartUpActivity.this, "synth0.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
+                    ScService.deliverDataFile(StartUpActivity.this, "synth1.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
+                    ScService.deliverDataFile(StartUpActivity.this, "sounds/a11wlk01.wav", ScService.getSynthDefsDirStr(StartUpActivity.this));
+
                 } catch (IOException e)
                 {
                     e.printStackTrace();
@@ -186,7 +194,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 // Kick off the supercollider playback routine
                 superCollider.start();
                 // Start a synth that increases amplitude based on GPS location distance
-                superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "frequency", OscMessage.defaultNodeId, 0, 1, "freq", 400}));
+                //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "frequency", OscMessage.defaultNodeId, 0, 1, "freq", 400}));
                 if(SCAudio.hasMessages()){
                     OscMessage receivedMessage = SCAudio.getMessage();
                     Log.d(receivedMessage.get(0).toString(), "scydef message");
@@ -710,11 +718,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     public void changeSynthFreq(){
         try {
-            ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
-            superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", OscMessage.defaultNodeId}));
-            Location current = LatLngTOLocation(currentLocation)git;
+            //ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
+            superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", nodes[node_no]}));
+            node_no++;
+            Location current = LatLngTOLocation(currentLocation);
             Location target = LatLngTOLocation(targetLocation);
-
             double distanceFt = current.distanceTo(target)/FEETINMETERS;
             double freq = 400; //setting up minimum aplititude so we always know that the synth is working.
             Log.d(Double.toString(distanceFt), "Frequency synth");
@@ -726,7 +734,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
 
             Log.d(Double.toString(freq), "Frequency synth");
-            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "frequency", OscMessage.defaultNodeId, 0, 1, "freq", freq}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node_no], 0, 1, "freq", (float)freq}));
+            //superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", nodes[node_no], "freq", (float)freq}));
+
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
             if(SCAudio.hasMessages()){
                 OscMessage receivedMessage = SCAudio.getMessage();
@@ -734,18 +744,18 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
         } catch (RemoteException e){
             e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
     /* New version of onCheckedChanged event listener
     @author: Karishma Changlani
      */
+
     @Override
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         View view = compoundButton.getRootView();
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
+        node_no = 0;
         //TODO: Fix body sensors
         //TODO: Add GPS information to sensors
 
@@ -765,9 +775,23 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 tv.append(s + "\n");
             }
             mapFragment.getMapAsync(this);
+            //MediaPlayer mp = MediaPlayer.create(this, );
+            try {
+
+                superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node_no], 0, 1}));
+
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
         }
         else{
             tv.setText("");
+            try {
+                superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", nodes[node_no]}));
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+
         }
         active = isChecked;
     }
