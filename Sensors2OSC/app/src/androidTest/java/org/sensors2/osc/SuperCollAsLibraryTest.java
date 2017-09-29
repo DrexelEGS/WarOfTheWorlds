@@ -58,7 +58,7 @@ public class SuperCollAsLibraryTest {
 
         initWavFile();
         // Check the scsyndef file was copied:
-        String fileToCheck = "synth0.scsyndef";
+        String fileToCheck = "sine.scsyndef";
         String synthDefsDirStr = ScService.getSynthDefsDirStr(context);
         assertTrue("Failed to find default file copied: " + fileToCheck,
                 Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
@@ -72,7 +72,7 @@ public class SuperCollAsLibraryTest {
             //servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
             int bufferIndex = 10;
             servStub.sendMessage(new OscMessage(new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/a11wlk01.wav"}));
-            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "synth0", OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex}));
+            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "sine", OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex}));
             Thread.sleep(3000);
             servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
             servStub.sendMessage(new OscMessage(new Object[] {"b_free", bufferIndex}));
