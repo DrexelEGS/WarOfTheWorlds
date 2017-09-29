@@ -25,8 +25,7 @@ s.sendMsg("/n_free", x);
 }.play).stop
 b = Buffer.read(s, Platform.resourceDir +/+ "sounds" +/+ "a11wlk01.wav");	
 (
-x = SynthDef("synth1",{ arg out = 0;
-	var b = Buffer.read(s, "sounds" +/+ "a11wlk01.wav");
+x = SynthDef("synth1",{ arg out = 0, bufnum;
 	Out.ar( out,
 		PlayBuf.ar(1, b.bufnum, BufRateScale.kr(b.bufnum) )
 	)

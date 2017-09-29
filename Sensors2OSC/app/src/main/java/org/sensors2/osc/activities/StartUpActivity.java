@@ -93,11 +93,11 @@ import java.util.Map;
 public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener, LocationListener {
 
     final String LOG_LABEL = "Location Listener>>";
-    final int[] nodes= {1001, 1002, 1003, 1004, 1005, 1006};
-    int node_no;
+    int node = 1001;
+    double curr_frequency = 400;
     final double FEETINMETERS = 3.28;
     final double MAX_DISTANCE = 400;
-    final double MIN_DISTANCE = 10;
+    final double MIN_DISTANCE = 20;
     private LocationManager locationManager;
     private Settings settings;
     private SensorCommunication sensorFactory;
@@ -113,7 +113,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private LatLng currentLocation = exciteLocation;
     private LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
-    private LatLng targetLocation  = curioTheatreLocation;
+    private LatLng[] testTargetLocations = {exciteLocation, new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323)};
+    int location_no = 0;
+    private LatLng targetLocation  = testTargetLocations[0];
     private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
     private ServiceConnection conn = new ScServiceConnection();
@@ -138,15 +140,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             view.append(Double.toString(location.getLatitude()));
             double longitude = location.getLongitude();
             Log.d("GPS", LOG_LABEL + "Longitude:" + longitude);
-            Toast.makeText(getApplicationContext(), "Long::" + longitude, Toast.LENGTH_SHORT).show();
             double latitude = location.getLatitude();
-            Toast.makeText(getApplicationContext(), "Lat::" + latitude, Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "Freq: "+ curr_frequency, Toast.LENGTH_SHORT).show();
             Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
             Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
             if((latitude > 39 && latitude < 41) && (longitude > -76 && longitude < -74))
                 currentLocation = new LatLng(latitude, longitude);
         }
-
         changeSynthFreq();
         mapFragment.getMapAsync(this);
     }
@@ -372,7 +372,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
-
 
     }
 
@@ -719,23 +718,28 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public void changeSynthFreq(){
         try {
             //ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
-            superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", nodes[node_no]}));
-            node_no++;
+            //superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
             Location current = LatLngTOLocation(currentLocation);
             Location target = LatLngTOLocation(targetLocation);
             double distanceFt = current.distanceTo(target)/FEETINMETERS;
-            double freq = 400; //setting up minimum aplititude so we always know that the synth is working.
+            double freq = 200; //setting up minimum aplititude so we always know that the synth is working.
             Log.d(Double.toString(distanceFt), "Frequency synth");
             if(distanceFt < MAX_DISTANCE){
-                if(distanceFt < MIN_DISTANCE)
-                    freq = 800;
+                if(distanceFt < MIN_DISTANCE) {
+                    freq = 800; 
+                    location_no++;
+                    if (location_no > testTargetLocations.length)
+                        location_no = 0;
+                    targetLocation = testTargetLocations[location_no];
+                }
                 else
-                    freq = 800 - distanceFt; //a negative slope fuction to ensure smooth increase
+                    freq = 800 - distanceFt/200*400; //a negative slope fuction to ensure smooth increase
             }
+            curr_frequency = freq;
 
             Log.d(Double.toString(freq), "Frequency synth");
-            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node_no], 0, 1, "freq", (float)freq}));
-            //superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", nodes[node_no], "freq", (float)freq}));
+            //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node], 0, 1, "freq", (float)freq}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", node, "freq", (float)freq}));
 
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
             if(SCAudio.hasMessages()){
@@ -755,7 +759,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         View view = compoundButton.getRootView();
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
-        node_no = 0;
+        node = 1001;
         //TODO: Fix body sensors
         //TODO: Add GPS information to sensors
 
@@ -778,7 +782,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             //MediaPlayer mp = MediaPlayer.create(this, );
             try {
 
-                superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node_no], 0, 1}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth0", node, 0, 1}));
 
             } catch (RemoteException e) {
                 e.printStackTrace();
@@ -787,7 +791,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         else{
             tv.setText("");
             try {
-                superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", nodes[node_no]}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
@@ -802,6 +806,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if(this.map == null) {
             this.map = map;
             map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
+            map.addMarker(new MarkerOptions().position(targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
             map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
         }
         else {
