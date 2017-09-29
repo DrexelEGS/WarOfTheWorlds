@@ -55,31 +55,27 @@ public class SuperCollAsLibraryTest {
         IBinder binder = serviceRule.bindService(serviceIntent);
         Log.d(TAG, "Service bound: " + binder);
         ISuperCollider.Stub servStub = (ISuperCollider.Stub) binder;
-        // Check the default file was copied:
 
-        try {
-            ScService.deliverDataFile(context, "synth1.scsyndef", ScService.getSynthDefsDirStr(context));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        String fileToCheck = "synth1.scsyndef";
+        initWavFile();
+        // Check the scsyndef file was copied:
+        String fileToCheck = "sine.scsyndef";
         String synthDefsDirStr = ScService.getSynthDefsDirStr(context);
         assertTrue("Failed to find default file copied: " + fileToCheck,
                 Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
+
         try {
             // start it manually (which is unusual for bound services, but that seems to be necessary:
             servStub.start();
             // Check it's working:
-            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "default", OscMessage.defaultNodeId}));
-            Thread.sleep(1000);
-            servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
-            initWavFile();
+            //servStub.sendMessage(new OscMessage(new Object[] {"s_new", "default", OscMessage.defaultNodeId}));
+            //Thread.sleep(1000);
+            //servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
             int bufferIndex = 10;
             servStub.sendMessage(new OscMessage(new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/a11wlk01.wav"}));
-            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "synth1", OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex}));
+            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "sine", OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex}));
             Thread.sleep(3000);
             servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
-            //servStub.sendMessage(new OscMessage(new Object[] {"b_free", bufferIndex}));
+            servStub.sendMessage(new OscMessage(new Object[] {"b_free", bufferIndex}));
         } catch (RemoteException e) {
             e.printStackTrace();
             assertTrue("RemoteException caught!", false);
