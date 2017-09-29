@@ -17,6 +17,7 @@ import android.os.RemoteException;
 import android.util.Log;
 
 import java.io.File;
+import java.io.FilenameFilter;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,7 +25,8 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Field;
 
-public class ScService extends Service { 
+public class ScService extends Service {
+	protected static final String TAG="SuperCollider-Android";
 	// static methods to construct SC file paths with a Context:
 	private static String getBaseSCDirStr(Context context) {
 		return context.getFilesDir().getAbsolutePath() + "/supercollider";
@@ -88,14 +90,26 @@ public class ScService extends Service {
 
 	@Override
     public void onCreate() {
+		Log.i(TAG, "SCService - onCreate called");
 		audioThread = null;
 		String synthDefsDirStr = getSynthDefsDirStr(this);
 		try {
 			ScService.initDataDir(synthDefsDirStr);
-			ScService.deliverDataFile(this, "default.scsyndef", synthDefsDirStr);
+			// deliver all scsyndefs:
+			File[] filesToDeliver = new File(synthDefsDirStr).listFiles(new FilenameFilter() {
+				public boolean accept(File dir, String name) {
+					return name.toLowerCase().endsWith(".scsyndef");
+				}
+			});
+			StringBuilder sb = new StringBuilder();
+			for (File fileTD : filesToDeliver) {
+				ScService.deliverDataFile(this, fileTD.getName(), synthDefsDirStr);
+				sb.append(fileTD.getName() + " ");
+			}
+			Log.i(TAG, "SCService - delivered scsyndef files: " + sb.toString());
 		} catch (IOException e) {
 			e.printStackTrace();
-			showError("Could not create directory " + synthDefsDirStr + " or copy default.scsyndef to it. Check if SD card is mounted to a host.");
+			showError("Could not create directory " + synthDefsDirStr + " or copy scsyndefs to it. Check if SD card is mounted to a host.");
 		}
     }
 
@@ -121,7 +135,8 @@ public class ScService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        int START_STICKY = 1;
+		Log.i(TAG, "SCService - onStartCommand called");
+		int START_STICKY = 1;
         try {
             // Android 2.1 API allows us to specify that this service is a foreground task
             Notification notification = new Notification(R.drawable.icon,
