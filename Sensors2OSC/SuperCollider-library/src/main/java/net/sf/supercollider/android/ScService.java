@@ -96,15 +96,13 @@ public class ScService extends Service {
 		try {
 			ScService.initDataDir(synthDefsDirStr);
 			// deliver all scsyndefs:
-			File[] filesToDeliver = new File(synthDefsDirStr).listFiles(new FilenameFilter() {
-				public boolean accept(File dir, String name) {
-					return name.toLowerCase().endsWith(".scsyndef");
-				}
-			});
+			String[] filesToDeliver = this.getAssets().list("");
 			StringBuilder sb = new StringBuilder();
-			for (File fileTD : filesToDeliver) {
-				ScService.deliverDataFile(this, fileTD.getName(), synthDefsDirStr);
-				sb.append(fileTD.getName() + " ");
+			for (String fileTD : filesToDeliver) {
+				if (fileTD.toLowerCase().endsWith(".scsyndef")) {
+					ScService.deliverDataFile(this, fileTD, synthDefsDirStr);
+					sb.append(fileTD + " ");
+				}
 			}
 			Log.i(TAG, "SCService - delivered scsyndef files: " + sb.toString());
 		} catch (IOException e) {
