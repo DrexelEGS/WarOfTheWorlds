@@ -37,12 +37,17 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -98,6 +103,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     final double FEETINMETERS = 3.28;
     final double MAX_DISTANCE = 400;
     final double MIN_DISTANCE = 20;
+    private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
+    private static final int MIN_TIME_BETWEEN_SHAKES_MILLISECS = 1000;
+    private long mLastShakeTime;
+    private boolean listeningForShake = false;
     private LocationManager locationManager;
     private Settings settings;
     private SensorCommunication sensorFactory;
@@ -673,6 +682,26 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
+        if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER && listeningForShake) {
+            long curTime = System.currentTimeMillis();
+            if ((curTime - mLastShakeTime) > MIN_TIME_BETWEEN_SHAKES_MILLISECS) {
+
+                float x = sensorEvent.values[0];
+                float y = sensorEvent.values[1];
+                float z = sensorEvent.values[2];
+
+                double acceleration = Math.sqrt(Math.pow(x, 2) +
+                        Math.pow(y, 2) +
+                        Math.pow(z, 2)) - SensorManager.GRAVITY_EARTH;
+                Log.d("Shake", "Acceleration is " + acceleration + "m/s^2");
+
+                if (acceleration > SHAKE_THRESHOLD) {
+                    updateTarget();
+                    mLastShakeTime = curTime;
+                    Log.d("Shake", "Shake, Rattle, and Roll");
+                }
+            }
+        }
         if (active) {
             this.sensorFactory.dispatch(sensorEvent);
         }
@@ -726,11 +755,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Log.d(Double.toString(distanceFt), "Frequency synth");
             if(distanceFt < MAX_DISTANCE){
                 if(distanceFt < MIN_DISTANCE) {
-                    freq = 800; 
-                    location_no++;
-                    if (location_no > testTargetLocations.length)
-                        location_no = 0;
-                    targetLocation = testTargetLocations[location_no];
+                    freq = 800;
+                    initiateShakePopup();
                 }
                 else
                     freq = 800 - distanceFt/200*400; //a negative slope fuction to ensure smooth increase
@@ -751,7 +777,57 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
     }
 
-    /* New version of onCheckedChanged event listener
+    private void updateTarget() {
+        location_no++;
+        if (location_no > testTargetLocations.length)
+            location_no = 0;
+        targetLocation = testTargetLocations[location_no];
+        addMarkers();
+        closeShakePopup();
+    }
+
+    private PopupWindow pwindo;
+
+    private void initiateShakePopup() {
+        try {
+// We need to get the instance of the LayoutInflater
+            LayoutInflater inflater = (LayoutInflater) StartUpActivity.this
+                    .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+            View layout = inflater.inflate(R.layout.shake_popup,
+                    (ViewGroup) findViewById(R.id.popup_element));
+
+            pwindo = new PopupWindow(layout, 300, 370, true);
+            pwindo.showAtLocation(layout, Gravity.CENTER, 0, 0);
+            // Listen for shakes (For now this is a hacky way of doing it)
+
+            Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            if (accelerometer != null) {
+                listeningForShake = true;
+                sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+            }
+
+            Button btnClosePopup = (Button) layout.findViewById(R.id.btn_close_popup);
+            btnClosePopup.setOnClickListener(cancel_button_click_listener);
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void closeShakePopup(){
+        pwindo.dismiss();
+    }
+
+    private View.OnClickListener cancel_button_click_listener = new View.OnClickListener() {
+        public void onClick(View v) {
+            pwindo.dismiss();
+
+        }
+    };
+
+
+      /* New version of onCheckedChanged event listener
     @author: Karishma Changlani
      */
 
@@ -760,8 +836,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         View view = compoundButton.getRootView();
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
         node = 1001;
-        //TODO: Fix body sensors
-        //TODO: Add GPS information to sensors
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
@@ -800,20 +874,21 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         active = isChecked;
     }
 
+    public void addMarkers(){
+        map.clear();
+        map.addMarker(new MarkerOptions().position(targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+        map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
+        map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
+    }
     public void onMapReady(GoogleMap map){
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
         locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, this);
         if(this.map == null) {
             this.map = map;
-            map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
-            map.addMarker(new MarkerOptions().position(targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
-            map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
+            addMarkers();
         }
         else {
-            map.clear();
-            map.addMarker(new MarkerOptions().position(targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
-            map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
-            map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
+            addMarkers();
         }
     }
 
