@@ -187,15 +187,19 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         public void onServiceConnected(ComponentName name, IBinder service) {
             StartUpActivity.this.superCollider = (ISuperCollider.Stub) service;
             try {
-
                 //transfer files
                 try {
-                    ScService.deliverDataFile(StartUpActivity.this, "not_default.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
-                    ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
-                    ScService.deliverDataFile(StartUpActivity.this, "synth0.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
-                    ScService.deliverDataFile(StartUpActivity.this, "synth1.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
-                    ScService.deliverDataFile(StartUpActivity.this, "sounds/a11wlk01.wav", ScService.getSynthDefsDirStr(StartUpActivity.this));
-
+                    // deliver all wav files:
+                    String soundsDirStr = ScService.getSoundsDirStr(StartUpActivity.this);
+                    String[] filesToDeliver = StartUpActivity.this.getAssets().list("");
+                    StringBuilder sb = new StringBuilder();
+                    for (String fileTD : filesToDeliver) {
+                        if (fileTD.toLowerCase().endsWith(".wav")) {
+                            ScService.deliverDataFile(StartUpActivity.this, fileTD, soundsDirStr);
+                            sb.append(fileTD + " ");
+                        }
+                    }
+                    Log.i(LOG_LABEL, "delivered wave files: " + sb.toString());
                 } catch (IOException e)
                 {
                     e.printStackTrace();
@@ -715,7 +719,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     /**/
     public void changeSynthAmp(){
         try {
-            ScService.deliverDataFile(StartUpActivity.this, "amplitude.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
             superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", OscMessage.defaultNodeId}));
             Location current = LatLngTOLocation(currentLocation);
             Location target = LatLngTOLocation(targetLocation);
@@ -739,8 +742,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
         } catch (RemoteException e){
             e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
@@ -752,20 +753,25 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Location target = LatLngTOLocation(targetLocation);
             double distanceFt = current.distanceTo(target)/FEETINMETERS;
             double freq = 200; //setting up minimum aplititude so we always know that the synth is working.
+            double scale = 0.1;
             Log.d(Double.toString(distanceFt), "Frequency synth");
             if(distanceFt < MAX_DISTANCE){
                 if(distanceFt < MIN_DISTANCE) {
                     freq = 800;
+                    scale = 1;
                     initiateShakePopup();
                 }
-                else
-                    freq = 800 - distanceFt/200*400; //a negative slope fuction to ensure smooth increase
+                else {
+                    freq = 800 - distanceFt / 200 * 400; //a negative slope fuction to ensure smooth increase
+                    scale = 1 - (distanceFt - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                }
             }
             curr_frequency = freq;
 
             Log.d(Double.toString(freq), "Frequency synth");
             //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node], 0, 1, "freq", (float)freq}));
             superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", node, "freq", (float)freq}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", node + 1, "scale", (float)scale}));
 
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
             if(SCAudio.hasMessages()){
@@ -857,7 +863,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             try {
 
                 superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth0", node, 0, 1}));
-
+                String soundFile = "a11wlk01.wav";
+                String synthName = "PlayABufferScaled";
+                int bufferIndex = 10;
+                superCollider.sendMessage(new OscMessage( new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(StartUpActivity.this) + "/" + soundFile}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"s_new", synthName, node + 1, 0, 1, "bufnum", bufferIndex}));
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
@@ -866,6 +876,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             tv.setText("");
             try {
                 superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node + 1}));
             } catch (RemoteException e) {
                 e.printStackTrace();
             }

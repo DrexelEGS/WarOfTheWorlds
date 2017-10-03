@@ -22,15 +22,15 @@ b = Buffer.read(s, "C:/Users/sr876/acad/devel/wotw-app/Sensors2OSC/SuperCollider
 )
 
 (
-SynthDef("PlayABuffer",{ arg bufnum = 0;
+SynthDef("PlayABufferScaled",{ arg bufnum = 0, scale = 1;
 	Out.ar( 0,
-	PlayBuf.ar(1, bufnum, BufRateScale.kr(bufnum), loop: 1.0)
+	PlayBuf.ar(1, bufnum, BufRateScale.kr(bufnum) * scale, loop: 1.0)
 	)
 }).store;
 )
 
 (
-a = Synth("PlayABuffer", [\bufnum, b.bufnum]);
+a = Synth("PlayABufferScaled", [\bufnum, b.bufnum, \scale, 0.5]);
 )
 
 (
