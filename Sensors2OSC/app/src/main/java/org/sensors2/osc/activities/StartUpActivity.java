@@ -763,15 +763,15 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 }
                 else {
                     freq = 800 - distanceFt / 200 * 400; //a negative slope fuction to ensure smooth increase
-                    scale = 1 - (distanceFt - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                    scale = 1.1 - (distanceFt - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
                 }
             }
             curr_frequency = freq;
 
             Log.d(Double.toString(freq), "Frequency synth");
             //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node], 0, 1, "freq", (float)freq}));
-            superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", node, "freq", (float)freq}));
-            superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", node + 1, "scale", (float)scale}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "freq", (float)freq}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "scale", (float)scale}));
 
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
             if(SCAudio.hasMessages()){
@@ -862,12 +862,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             //MediaPlayer mp = MediaPlayer.create(this, );
             try {
 
-                superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth0", node, 0, 1}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "synth0", node, 0, 1}));
                 String soundFile = "a11wlk01.wav";
                 String synthName = "PlayABufferScaled";
                 int bufferIndex = 10;
                 superCollider.sendMessage(new OscMessage( new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(StartUpActivity.this) + "/" + soundFile}));
                 superCollider.sendMessage(new OscMessage( new Object[] {"s_new", synthName, node + 1, 0, 1, "bufnum", bufferIndex}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "scale", 0.1f}));
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
@@ -875,8 +876,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         else{
             tv.setText("");
             try {
-                superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
-                superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node + 1}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"n_free", node}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"n_free", node + 1}));
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
