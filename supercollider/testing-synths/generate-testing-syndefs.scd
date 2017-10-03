@@ -30,7 +30,11 @@ SynthDef("PlayABufferScaled",{ arg bufnum = 0, scale = 1;
 )
 
 (
-a = Synth("PlayABufferScaled", [\bufnum, b.bufnum, \scale, 0.5]);
+a = Synth("PlayABufferScaled", [\bufnum, b.bufnum, \scale, 0.2]);
+)
+
+(
+a.set(\scale, 1.9);
 )
 
 (
