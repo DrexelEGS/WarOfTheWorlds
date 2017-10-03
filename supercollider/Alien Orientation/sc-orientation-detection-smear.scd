@@ -5,7 +5,7 @@ var run = true, sensor = 'orientation', ox = 0, ax, ay, av, getAngle, getDistanc
 // load buffer (adjust path as necessary)
 b.free;
 s.sync;
-b = Buffer.read(s, Document.current.dir ++ "/02 Mozart.wav",
+b = Buffer.read(s, "C:/Users/sr876/acad/devel/wotw-app/supercollider/Alien Orientation/02 Mozart.wav",
  action: {|buf|
 	 // smeared song
 	aSynth = {|smear = 30, amp = 0.5|

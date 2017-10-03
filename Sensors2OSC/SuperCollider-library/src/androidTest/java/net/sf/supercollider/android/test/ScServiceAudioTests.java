@@ -54,15 +54,15 @@ public class ScServiceAudioTests {
 		Log.d(TAG, "Service bound: " + binder);
 		ISuperCollider.Stub servStub = (ISuperCollider.Stub) binder;
 		// Check the default file was copied:
-		String fileToCheck = "synth1.scsyndef";
+		String fileToCheck = "default.scsyndef";
 		String synthDefsDirStr = ScService.getSynthDefsDirStr(context);
-		//assertTrue("Failed to find default file copied: " + fileToCheck,
-				//Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
+		assertTrue("Failed to find default file copied: " + fileToCheck,
+				Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
 		try {
 			// start it manually (which is unusual for bound services, but that seems to be necessary:
 			servStub.start();
 			// Check it's working:
-			servStub.sendMessage(new OscMessage(new Object[] {"s_new", "synth1", OscMessage.defaultNodeId}));
+			servStub.sendMessage(new OscMessage(new Object[] {"s_new", "default", OscMessage.defaultNodeId}));
 			Thread.sleep(1000);
 			servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
 			initWavFile();

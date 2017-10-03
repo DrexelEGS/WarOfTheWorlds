@@ -83,7 +83,7 @@ public class ScService extends Service {
 
     public void start() {
 		if (audioThread == null || !audioThread.isRunning() ) {
-			audioThread = new SCAudio(getPluginsDirStr(this), getSynthDefsDirStr(this));
+			audioThread = new SCAudio(0, getPluginsDirStr(this), getSynthDefsDirStr(this));
 			audioThread.start();
 		}
 	}
