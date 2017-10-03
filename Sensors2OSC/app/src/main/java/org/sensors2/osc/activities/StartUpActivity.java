@@ -100,9 +100,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     final String LOG_LABEL = "Location Listener>>";
     int node = 1001;
     double curr_frequency = 400;
-    final double FEETINMETERS = 3.28;
-    final double MAX_DISTANCE = 400;
-    final double MIN_DISTANCE = 20;
+    final double MAX_DISTANCE = 60;
+    final double MIN_DISTANCE = 5;
     private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
     private static final int MIN_TIME_BETWEEN_SHAKES_MILLISECS = 1000;
     private long mLastShakeTime;
@@ -122,7 +121,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private LatLng currentLocation = exciteLocation;
     private LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
-    private LatLng[] testTargetLocations = {exciteLocation, new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
+    private LatLng[] testTargetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
     int location_no = 0;
     private LatLng targetLocation  = testTargetLocations[0];
     private ISuperCollider.Stub superCollider;
@@ -723,7 +722,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Location current = LatLngTOLocation(currentLocation);
             Location target = LatLngTOLocation(targetLocation);
 
-            double distanceFt = current.distanceTo(target)/FEETINMETERS;
+            double distanceFt = current.distanceTo(target);
             double amp = 0; //setting up minimum aplititude so we always know that the synth is working.
             Log.d(Double.toString(distanceFt), "Amplitude synth");
             if(distanceFt < MAX_DISTANCE){
@@ -751,21 +750,22 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             //superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
             Location current = LatLngTOLocation(currentLocation);
             Location target = LatLngTOLocation(targetLocation);
-            double distanceFt = current.distanceTo(target)/FEETINMETERS;
+            double distance = current.distanceTo(target);
             double freq = 200; //setting up minimum aplititude so we always know that the synth is working.
             double scale = 0.1;
-            Log.d(Double.toString(distanceFt), "Frequency synth");
-            if(distanceFt < MAX_DISTANCE){
-                if(distanceFt < MIN_DISTANCE) {
+            Log.d(Double.toString(distance), "Frequency synth");
+            if(distance < MAX_DISTANCE){
+                if(distance < MIN_DISTANCE) {
                     freq = 800;
                     scale = 1;
                     initiateShakePopup();
                 }
                 else {
-                    freq = 800 - distanceFt / 200 * 400; //a negative slope fuction to ensure smooth increase
-                    scale = 1.1 - (distanceFt - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                    freq = 800 - distance / 200 * 400; //a negative slope fuction to ensure smooth increase
+                    scale = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
                 }
             }
+            Toast.makeText(getApplicationContext(), "Scale: "+ scale, Toast.LENGTH_SHORT).show();
             curr_frequency = freq;
 
             Log.d(Double.toString(freq), "Frequency synth");
