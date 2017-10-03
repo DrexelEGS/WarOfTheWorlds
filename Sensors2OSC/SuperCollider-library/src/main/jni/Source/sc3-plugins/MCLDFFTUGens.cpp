@@ -176,7 +176,7 @@ struct FFTMutInf : FFTAnalyser_Unit
 	} else { \
 		buf = world->mSndBufs + ibufnum; \
 	} \
-	int numbins = buf->samples - 2 >> 1;
+	int numbins = (buf->samples - 2) >> 1;
 
 // Same as above; but with "output2" as well as "output"
 #define FFTAnalyser_GET_BUF_TWOOUTS \
@@ -197,7 +197,7 @@ struct FFTMutInf : FFTAnalyser_Unit
 	} else { \
 		buf = world->mSndBufs + ibufnum; \
 	} \
-	int numbins = buf->samples - 2 >> 1;
+	int numbins = (buf->samples - 2) >> 1;
 
 // As above; but for operation on two input buffers
 #define FFTAnalyser_GET_BUF2 \
@@ -232,7 +232,7 @@ struct FFTMutInf : FFTAnalyser_Unit
 		buf2 = world->mSndBufs + ibufnum2; \
 	} \
 	if (buf1->samples != buf2->samples) return; \
-	int numbins = buf1->samples - 2 >> 1;
+	int numbins = (buf1->samples - 2) >> 1;
 
 // Copied from FFT_UGens.cpp
 #define MAKE_TEMP_BUF \
@@ -348,7 +348,7 @@ SCPolarBuf* ToPolarApx(SndBuf *buf)
 {
 	if (buf->coord == coord_Complex) {
 		SCComplexBuf* p = (SCComplexBuf*)buf->data;
-		int numbins = buf->samples - 2 >> 1;
+		int numbins = (buf->samples - 2) >> 1;
 		for (int i=0; i<numbins; ++i) {
 			p->bin[i].ToPolarApxInPlace();
 		}
@@ -362,7 +362,7 @@ SCComplexBuf* ToComplexApx(SndBuf *buf)
 {
 	if (buf->coord == coord_Polar) {
 		SCPolarBuf* p = (SCPolarBuf*)buf->data;
-		int numbins = buf->samples - 2 >> 1;
+		int numbins = (buf->samples - 2) >> 1;
 		for (int i=0; i<numbins; ++i) {
 			p->bin[i].ToComplexApxInPlace();
 		}
@@ -486,7 +486,7 @@ void FFTSubbandPower_next(FFTSubbandPower *unit, int inNumSamples)
 	} else {
 		buf = world->mSndBufs + ibufnum;
 	}
-	int numbins = buf->samples - 2 >> 1;
+	int numbins = (buf->samples - 2) >> 1;
 	// End: Multi-output equiv of FFTAnalyser_GET_BUF
 	
 	int scalemode = unit->m_scalemode;
@@ -1390,7 +1390,7 @@ void PV_Whiten_next(PV_Whiten *unit, int inNumSamples){
 	} else {
 		buf2 = world->mSndBufs + ibufnum2;
 	}
-	int numbins = buf1->samples - 2 >> 1;
+	int numbins = (buf1->samples - 2) >> 1;
 //	Print("\nibufnum1: %d; ibufnum2: %d", ibufnum1, ibufnum2);
 //	if (buf1->samples != buf2->samples) return;
 	
@@ -1544,7 +1544,7 @@ void FFTSubbandFlatness_next(FFTSubbandFlatness *unit, int inNumSamples)
 	World *world = unit->mWorld;
 	if (ibufnum >= world->mNumSndBufs) ibufnum = 0;
 	SndBuf *buf = world->mSndBufs + ibufnum;
-	int numbins = buf->samples - 2 >> 1;
+	int numbins = (buf->samples - 2) >> 1;
 	// End: Multi-output equiv of FFTAnalyser_GET_BUF
 	
 	// Now we create the integer lookup list, if it doesn't already exist

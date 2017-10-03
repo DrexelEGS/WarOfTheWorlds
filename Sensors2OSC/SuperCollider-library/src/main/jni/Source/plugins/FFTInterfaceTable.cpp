@@ -37,7 +37,7 @@ SCPolarBuf* ToPolarApx(SndBuf *buf)
 {
 	if (buf->coord == coord_Complex) {
 		SCComplexBuf* p = (SCComplexBuf*)buf->data;
-		int numbins = buf->samples - 2 >> 1;
+		int numbins = (buf->samples - 2) >> 1;
 		for (int i=0; i<numbins; ++i) {
 			p->bin[i].ToPolarApxInPlace();
 		}
@@ -51,7 +51,7 @@ SCComplexBuf* ToComplexApx(SndBuf *buf)
 {
 	if (buf->coord == coord_Polar) {
 		SCPolarBuf* p = (SCPolarBuf*)buf->data;
-		int numbins = buf->samples - 2 >> 1;
+		int numbins = (buf->samples - 2) >> 1;
 		for (int i=0; i<numbins; ++i) {
 			p->bin[i].ToComplexApxInPlace();
 		}

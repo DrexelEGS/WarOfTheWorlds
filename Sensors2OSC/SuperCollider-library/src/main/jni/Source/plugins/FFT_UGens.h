@@ -74,7 +74,7 @@ struct PV_Unit : Unit
 		buf = world->mSndBufs + ibufnum; \
 	} \
 	LOCK_SNDBUF(buf); \
-	int numbins = buf->samples - 2 >> 1; \
+	int numbins = (buf->samples - 2) >> 1; \
 
 
 // for operation on two input buffers, result goes in first one.
@@ -112,7 +112,7 @@ struct PV_Unit : Unit
 	} \
 	LOCK_SNDBUF2(buf1, buf2); \
 	if (buf1->samples != buf2->samples) return; \
-	int numbins = buf1->samples - 2 >> 1;
+	int numbins = (buf1->samples - 2) >> 1;
 
 #define MAKE_TEMP_BUF \
 	if (!unit->m_tempbuf) { \
