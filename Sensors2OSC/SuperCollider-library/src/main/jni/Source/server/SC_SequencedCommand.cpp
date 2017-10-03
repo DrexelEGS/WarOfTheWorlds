@@ -668,11 +668,27 @@ bool BufReadCmd::Stage2()
 		scprintf(str);
 		return false;
 	}
+    if (false) {
+        char str[265];
+        sprintf(str, "BEFORE sf_open_fd\nFileInfo fr %lli sr %d ch %d fm %d sc %d sk %d.\n",
+                fileinfo.frames, fileinfo.samplerate, fileinfo.channels, fileinfo.format, fileinfo.sections, fileinfo.seekable
+        );
+        scprintf(str);
+        scprintf ("sizeof (FS_INFO): %d\n", sizeof (SF_INFO)) ;
+    }
 	SNDFILE* sf = sf_open_fd(fileno(fp), SFM_READ, &fileinfo, true);
 #else
 	SNDFILE* sf = sf_open(mFilename, SFM_READ, &fileinfo);
 #endif
-	if (!sf) {
+    if (false) {
+        char str[265];
+        sprintf(str, "AFTER  sf_open_fd\nFileInfo fr %lli sr %d ch %d fm %d sc %d sk %d.\n",
+                fileinfo.frames, fileinfo.samplerate, fileinfo.channels, fileinfo.format, fileinfo.sections, fileinfo.seekable
+        );
+        scprintf(str);
+    }
+
+    if (!sf) {
 		char str[256];
 #ifndef _WIN32
 		fclose(fp);

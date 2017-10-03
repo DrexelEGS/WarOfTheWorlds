@@ -331,6 +331,36 @@ psf_log_printf (SF_PRIVATE *psf, const char *format, ...)
 }
 #endif /* psf_log_printf */
 
+void debug_print_sfinfos(int counter, SF_PRIVATE *psf, SF_INFO *sfinfo)
+{
+	if (1 == 0) {
+		char str[265];
+		sprintf(str, "SFINFOS(%d):\n psf.sf  fr %lli sr %d ch %d fm %d sc %d sk %d.\nFileInfo fr %lli sr %d ch %d fm %d sc %d sk %d.\n",
+				counter,
+				psf->sf.frames, psf->sf.samplerate, psf->sf.channels, psf->sf.format, psf->sf.sections, psf->sf.seekable,
+				sfinfo->frames, sfinfo->samplerate, sfinfo->channels, sfinfo->format, sfinfo->sections, sfinfo->seekable
+		);
+		psf_log_printf(psf, str);
+        psf_log_printf (psf, "sizeof (FS_INFO): %d\n", sizeof (SF_INFO)) ;
+        psf_log_printf (psf, "sizeof (psf->fs): %d\n", sizeof (psf->sf)) ;
+    }
+}
+
+void debug_print_sfinfo(int counter, SF_PRIVATE *psf)
+{
+	if (1 == 0) {
+		char str[265];
+		sprintf(str, "SFINFOS(%d):\n psf.sf  fr %lli sr %d ch %d fm %d sc %d sk %d.\n",
+				counter,
+				psf->sf.frames, psf->sf.samplerate, psf->sf.channels, psf->sf.format, psf->sf.sections, psf->sf.seekable
+		);
+		psf_log_printf(psf, str);
+        psf_log_printf (psf, "sizeof (SF_PRIV): %d\n", sizeof (SF_PRIVATE)) ;
+        psf_log_printf (psf, "sizeof (FS_INFO): %d\n", sizeof (SF_INFO)) ;
+        psf_log_printf (psf, "sizeof (psf->fs): %d\n", sizeof (psf->sf)) ;
+	}
+}
+
 /*-----------------------------------------------------------------------------------------------
 **  ASCII header printf functions.
 **  Some formats (ie NIST) use ascii text in their headers.

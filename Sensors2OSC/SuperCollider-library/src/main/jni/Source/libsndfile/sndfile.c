@@ -349,6 +349,8 @@ sf_open_fd	(int fd, int mode, SF_INFO *sfinfo, int close_desc)
 	if (! close_desc)
 		psf->file.do_not_close_descriptor = SF_TRUE ;
 
+    debug_print_sfinfos(1, psf, sfinfo);
+
 	return psf_open_file (psf, sfinfo) ;
 } /* sf_open_fd */
 
@@ -2510,6 +2512,8 @@ psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo)
 			memset (sfinfo, 0, sizeof (SF_INFO)) ;
 		} ;
 
+    debug_print_sfinfos(2, psf, sfinfo);
+
 	memcpy (&(psf->sf), sfinfo, sizeof (SF_INFO)) ;
 
 	psf->Magick 		= SNDFILE_MAGICK ;
@@ -2749,6 +2753,8 @@ psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo)
 				error = SFE_UNKNOWN_FORMAT ;
 		} ;
 
+    debug_print_sfinfos(3, psf, sfinfo);
+
 	if (error)
 		goto error_exit ;
 
@@ -2793,6 +2799,8 @@ psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo)
 	memcpy (sfinfo, &(psf->sf), sizeof (SF_INFO)) ;
 
 	memcpy (sfinfo, &(psf->sf), sizeof (SF_INFO)) ;
+
+    debug_print_sfinfos(8, psf, sfinfo);
 
 	return (SNDFILE *) psf ;
 

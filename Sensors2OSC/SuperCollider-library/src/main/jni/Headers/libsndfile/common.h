@@ -718,6 +718,8 @@ void psf_init_files (SF_PRIVATE *psf) ;
 void psf_use_rsrc (SF_PRIVATE *psf, int on_off) ;
 
 SNDFILE * psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo) ;
+void debug_print_sfinfos(int counter, SF_PRIVATE *psf, SF_INFO *sfinfo);
+void debug_print_sfinfo(int counter, SF_PRIVATE *psf);
 
 sf_count_t psf_fseek (SF_PRIVATE *psf, sf_count_t offset, int whence) ;
 sf_count_t psf_fread (void *ptr, sf_count_t bytes, sf_count_t count, SF_PRIVATE *psf) ;

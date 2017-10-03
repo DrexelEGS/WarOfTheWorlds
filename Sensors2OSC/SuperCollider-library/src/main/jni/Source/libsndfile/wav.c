@@ -185,10 +185,14 @@ wav_open	 (SF_PRIVATE *psf)
 	wpriv->wavex_ambisonic = SF_AMBISONIC_NONE ;
 	psf->str_flags = SF_STR_ALLOW_START | SF_STR_ALLOW_END ;
 
+	debug_print_sfinfo(100, psf);
+
 	if (psf->file.mode == SFM_READ || (psf->file.mode == SFM_RDWR && psf->filelength > 0))
 	{	if ((error = wav_read_header (psf, &blockalign, &framesperblock)))
 			return error ;
 		} ;
+
+	debug_print_sfinfo(200, psf);
 
 	subformat = SF_CODEC (psf->sf.format) ;
 
@@ -311,6 +315,8 @@ wav_read_header	 (SF_PRIVATE *psf, int *blockalign, int *framesperblock)
 		return SFE_INTERNAL ;
 	wav_fmt = &wpriv->wav_fmt ;
 
+    debug_print_sfinfo(110, psf);
+
 	/* Set position to start of file to begin reading header. */
 	psf_binheader_readf (psf, "p", 0) ;
 
@@ -380,6 +386,8 @@ wav_read_header	 (SF_PRIVATE *psf, int *blockalign, int *framesperblock)
 
 					psf_binheader_readf (psf, "4", &dword) ;
 					psf_log_printf (psf, "fmt  : %d\n", dword) ;
+
+                    debug_print_sfinfo(133, psf);
 
 					if ((error = wav_w64_read_fmt_chunk (psf, dword)))
 						return error ;
@@ -714,6 +722,8 @@ wav_read_header	 (SF_PRIVATE *psf, int *blockalign, int *framesperblock)
 
 	if (wpriv->fmt_is_broken)
 		wav_w64_analyze (psf) ;
+
+    debug_print_sfinfo(190, psf);
 
 	/* Only set the format endian-ness if its non-standard big-endian. */
 	if (psf->endian == SF_ENDIAN_BIG)

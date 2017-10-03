@@ -100,6 +100,8 @@ wav_w64_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
 
 	/* assume psf->rwf_endian is already properly set */
 
+	debug_print_sfinfo(1331, psf);
+
 	/* Read the minimal WAV file header here. */
 	bytesread = psf_binheader_readf (psf, "224422",
 					&(wav_fmt->format), &(wav_fmt->min.channels),
@@ -150,9 +152,13 @@ wav_w64_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
 			}
 		} ;
 
+	debug_print_sfinfo(1333, psf);
+
+    psf->sf.frames 		= 0 ;					/* Correct this when reading data chunk. */
 	psf->sf.samplerate	= wav_fmt->min.samplerate ;
-	psf->sf.frames 		= 0 ;					/* Correct this when reading data chunk. */
 	psf->sf.channels	= wav_fmt->min.channels ;
+
+	debug_print_sfinfo(1334, psf);
 
 	switch (wav_fmt->format)
 	{	case WAVE_FORMAT_PCM :
