@@ -207,7 +207,7 @@
 #define PACKAGE_VERSION "1.0.21pre1"
 
 /* Set to maximum allowed value of sf_count_t type. */
-#define SF_COUNT_MAX 0x7FFFFFFF
+#define SF_COUNT_MAX            0x7FFFFFFFFFFFFFFFLL
 
 /* The size of `double', as computed by sizeof. */
 #define SIZEOF_DOUBLE 8

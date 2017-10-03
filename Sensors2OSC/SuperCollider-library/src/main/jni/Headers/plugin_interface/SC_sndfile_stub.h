@@ -21,37 +21,42 @@
 ** taken from sndfile.h
 **/
 
+#include <stdio.h>
+#include <sys/types.h>
 
 
 /* A SNDFILE* pointer can be passed around much like stdio.h's FILE* pointer. */
 
-typedef struct SNDFILE_tag      SNDFILE ;
+typedef	struct SNDFILE_tag	SNDFILE ;
 
-
+/* The following typedef is system specific and is defined when libsndfile is
+** compiled. sf_count_t can be one of loff_t (Linux), off_t (*BSD), off64_t
+** (Solaris), __int64 (Win32) etc. On windows, we need to allow the same
+** header file to be compiler by both GCC and the microsoft compiler.
+*/
 
 #if (defined (_MSCVER) || defined (_MSC_VER))
-typedef __int64_t       sf_count_t ;
-#define SF_COUNT_MAX            0x7fffffffffffffffi64
+typedef __int64		sf_count_t ;
+#define SF_COUNT_MAX		0x7fffffffffffffffi64
 #else
-typedef off_t   sf_count_t ;
+typedef long long	sf_count_t ;
 #define SF_COUNT_MAX            0x7FFFFFFFFFFFFFFFLL
 #endif
 
 
 /* A pointer to a SF_INFO structure is passed to sf_open_read () and filled in.
 ** On write, the SF_INFO structure is filled in by the user and passed into
-** sf_open_write ().
+** sf_open ().
 */
 
 struct SF_INFO
-{       sf_count_t      frames ;                /* Used to be called samples.  Changed to avoid confusion. */
-        int                     samplerate ;
-        int                     channels ;
-        int                     format ;
-        int                     sections ;
-        int                     seekable ;
+{	sf_count_t	frames ;		/* Used to be called samples.  Changed to avoid confusion. */
+    int			samplerate ;
+    int			channels ;
+    int			format ;
+    int			sections ;
+    int			seekable ;
 } ;
 
-typedef struct SF_INFO SF_INFO ;
-
+typedef	struct SF_INFO SF_INFO ;
 
