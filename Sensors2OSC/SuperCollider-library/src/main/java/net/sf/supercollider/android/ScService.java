@@ -38,7 +38,7 @@ public class ScService extends Service {
 		return getBaseSCDirStr(context) + "/synthdefs";
 	}
 	public static String getPluginsDirStr(Context context) {
-		return context.getFilesDir().getParent() + "/lib";
+		return context.getApplicationInfo().nativeLibraryDir;
 	}
     // note: the pluginsDirStr was previously below getDataDirectory(), more specifically:
     // getFilesDir().getParent() + "/lib" (this way of constructing it won't work without a Context)
