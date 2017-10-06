@@ -699,12 +699,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Location target = LatLngTOLocation(targetLocation);
             double distance = current.distanceTo(target);
             double freq = 200; //setting up minimum aplititude so we always know that the synth is working.
-            double scale = 0.1;
+            double scale = 1;
             Log.d(Double.toString(distance), "Frequency synth");
             if(distance < MAX_DISTANCE){
                 if(distance < MIN_DISTANCE) {
                     freq = 800;
-                    scale = 1;
+                    scale = 0;
                     initiateShakePopup();
                 }
                 else {
@@ -718,7 +718,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Log.d(Double.toString(freq), "Frequency synth");
             //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node], 0, 1, "freq", (float)freq}));
             superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "freq", (float)freq}));
-            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "scale", (float)scale}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "dist", (float)scale}));
 
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
             if(SCAudio.hasMessages()){
@@ -808,11 +808,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
                 superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "synth0", node, 0, 1}));
                 String soundFile = "a11wlk01.wav";
-                String synthName = "PlayABufferScaled";
+                String synthName = "bufSticker";
                 int bufferIndex = 10;
                 superCollider.sendMessage(new OscMessage( new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(StartUpActivity.this) + "/" + soundFile}));
                 superCollider.sendMessage(new OscMessage( new Object[] {"s_new", synthName, node + 1, 0, 1, "bufnum", bufferIndex}));
-                superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "scale", 0.1f}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "dist", 1f}));
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
