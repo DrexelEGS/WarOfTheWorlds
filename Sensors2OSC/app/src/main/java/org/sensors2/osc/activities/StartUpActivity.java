@@ -100,8 +100,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     final String LOG_LABEL = "Location Listener>>";
     int node = 1001;
     double curr_frequency = 400;
-    final double MAX_DISTANCE = 60;
-    final double MIN_DISTANCE = 5;
+    final double MAX_DISTANCE = 100;
+    final double MIN_DISTANCE = 7;
     private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
     private static final int MIN_TIME_BETWEEN_SHAKES_MILLISECS = 1000;
     private long mLastShakeTime;
@@ -281,81 +281,28 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return (float) (440.0 * Math.pow((float) 2., (note - 69.0) * (float) 0.083333333333));
     }
 
+    public static boolean hasPermissions(Context context, String... permissions) {
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && context != null && permissions != null) {
+            for (String permission : permissions) {
+                if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     @Override
     @SuppressLint("NewApi")
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
-        int permissionCheck = ContextCompat.checkSelfPermission(this,
-                Manifest.permission.RECORD_AUDIO);
-        // Here, thisActivity is the current activity
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
+        int PERMISSION_ALL = 1;
+        String[] PERMISSIONS = {Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BODY_SENSORS};
 
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.RECORD_AUDIO)) {
-
-                /* TODO: Show an explanation to the user *asynchronously* -- don't block
-                  this thread waiting for the user's response! After the user
-                  sees the explanation, try again to request the permission. */
-
-            } else {
-
-                // No explanation needed
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.RECORD_AUDIO}, 1);
-            }
+        if(!hasPermissions(this, PERMISSIONS)){
+            ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
         }
 
-        int permissionCheckloc = ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION);
-        // Here, thisActivity is the current activity
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION)) {
-
-                /* TODO: Show an explanation to the user *asynchronously* -- don't block
-                  this thread waiting for the user's response! After the user
-                  sees the explanation, try again to request the permission. */
-
-            } else {
-
-                // No explanation needed
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1
-                );
-            }
-        }
-
-        int permissionCheckcoarse = ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_COARSE_LOCATION);
-        // Here, thisActivity is the current activity
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_COARSE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.ACCESS_COARSE_LOCATION)) {
-
-                /* TODO: Show an explanation to the user *asynchronously* -- don't block
-                  this thread waiting for the user's response! After the user
-                  sees the explanation, try again to request the permission. */
-
-            } else {
-
-                // No explanation needed
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 1
-                );
-            }
-        }
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         setContentView(R.layout.activity_main);
         //mainWidget = new TextView(this); //TODO: Find a way to get rid of this
@@ -705,7 +652,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 }
             }
         }
-        if (active) {
+        if (active && !listeningForShake) {
             this.sensorFactory.dispatch(sensorEvent);
         }
     }
@@ -761,7 +708,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     initiateShakePopup();
                 }
                 else {
-                    freq = 800 - distance / 200 * 400; //a negative slope fuction to ensure smooth increase
+                    freq = 800 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE)*200; //a negative slope fuction to ensure smooth increase
                     scale = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
                 }
             }
@@ -843,9 +790,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
         node = 1001;
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
         for(SensorConfiguration sc : this.dispatcher.getSensorConfigurations()){
             sc.setSend(isChecked);
         }
