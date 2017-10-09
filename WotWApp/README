@@ -1,6 +1,8 @@
-Sensors2OSC
------------
+WotWApp
+---------
 
-Android app for sending sensor data via Open Sound Control (OSC) [0].
+Android app for the War of the World research demo, created at Drexel University.
 
-[0] http://opensoundcontrol.org/
+(C) 2017 Stefan Rank, Karishma Changlani and the WotW team.
+
+Code partly based on the Supercollider Android port and the Sensors2OSC project.
