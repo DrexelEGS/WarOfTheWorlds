@@ -196,6 +196,30 @@ LOCAL_MODULE := MCLDTriggeredStatsUgens
 include ${LOCAL_PATH}/simple_ugen.mk
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := BhobChaos
+include ${LOCAL_PATH}/simple_ugen.mk
+
+# include $(CLEAR_VARS)
+# LOCAL_MODULE := BhobFFT
+# include ${LOCAL_PATH}/simple_ugen.mk
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := BhobFilt
+include ${LOCAL_PATH}/simple_ugen.mk
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := BhobNoise
+include ${LOCAL_PATH}/simple_ugen.mk
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := BhobGrain
+include ${LOCAL_PATH}/simple_ugen.mk
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := MCLDDistortionUGens
+include ${LOCAL_PATH}/simple_ugen.mk
+
+include $(CLEAR_VARS)
 LOCAL_MODULE := MCLDFFTUGens
 LOCAL_SRC_FILES := \
     $(PLUGINS_DIR)/$(LOCAL_MODULE).cpp \
