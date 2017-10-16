@@ -19,16 +19,17 @@ FFT analysis and phase vocoder UGens for SuperCollider, by Dan Stowell.
 
 */
 
+#include "SC_fftlib.h"
 #include "SC_PlugIn.h"
-#include "SCComplex.h"
 #include "FFT_UGens.h"
+#include <stdio.h>
 
 // Used by PV_MagLog
 #define SMALLEST_NUM_FOR_LOG 2e-42
 
 #define PI 3.1415926535898f
 #define MPI -3.1415926535898f
-#define TWOPI 6.28318530717952646f 
+#define TWOPI 6.28318530717952646f
 #define THREEPI 9.4247779607694f
 
 /* Rewrap phase into +-pi domain: essentially mod(phase+pi,-2pi)+pi */
@@ -40,7 +41,7 @@ FFT analysis and phase vocoder UGens for SuperCollider, by Dan Stowell.
 struct FFTAnalyser_Unit : Unit
 {
 	float outval;
-	
+
 	// Not always used: multipliers which convert from bin indices to freq vals, and vice versa.
 	// See also the macros for deriving these.
 	float m_bintofreq, m_freqtobin;
@@ -52,25 +53,15 @@ struct FFTAnalyser_OutOfPlace : FFTAnalyser_Unit
 	float *m_tempbuf;
 };
 
-struct FFTPercentile_Unit : FFTAnalyser_OutOfPlace 
-{
-	bool m_interpolate;
-};
-
 struct PV_MagSubtract : Unit {
 };
 
-struct FFTFlux_Unit : FFTAnalyser_OutOfPlace 
+struct FFTFlux_Unit : FFTAnalyser_OutOfPlace
 {
 	float m_yesternorm;
 	float m_yesterdc;
 	float m_yesternyq;
 	bool m_normalise;
-};
-
-struct FFTFlatnessSplitPercentile_Unit : FFTPercentile_Unit
-{
-	float outval2;
 };
 
 struct FFTPower : FFTAnalyser_Unit
@@ -83,12 +74,12 @@ struct FFTSubbandPower : FFTAnalyser_Unit
 {
 	float m_normfactor;
 	bool m_square;
-	
+
 	int m_numbands;
 	int *m_cutoffs; // Will hold bin indices corresponding to frequencies
 	float *m_outvals;
 	bool m_cutoff_inited;
-	
+
 	int m_scalemode;
 };
 
@@ -111,10 +102,6 @@ struct PV_Whiten : Unit {
 	int m_bindownsample;
 };
 
-struct FFTRumble : FFTAnalyser_Unit
-{
-	int m_binpos; // The bin index corresponding to the supplied pitch. We'll round DOWN so as to avoid the fundamental contaminating.
-};
 
 struct FFTSubbandFlatness : FFTAnalyser_Unit
 {
@@ -143,18 +130,13 @@ struct FFTPeak : FFTAnalyser_Unit
 struct PV_MagSmooth : Unit {
 	float *m_memory;
 };
-struct FFTMutInf : FFTAnalyser_Unit
-{
-	int m_frombin; // Will hold bin index
-	int m_tobinp1; // Will hold bin index
-	
-	int m_numframes;
-	int m_numbinsused;
-	int m_currentframe; // index of which frame we're writing in
-	
-	float *m_magdata;
-	float *m_framesums;	
+struct PV_ExtractRepeat : Unit {
+	float* m_logmags;
+	int m_cursor;
+	float m_fbufnum;
+	SndBuf* m_buf;
 };
+
 
 // for operation on one buffer
 // just like PV_GET_BUF except it outputs unit->outval rather than -1 when FFT not triggered
@@ -239,7 +221,7 @@ struct FFTMutInf : FFTAnalyser_Unit
 	if (!unit->m_tempbuf) { \
 		unit->m_tempbuf = (float*)RTAlloc(unit->mWorld, buf->samples * sizeof(float)); \
 		unit->m_numbins = numbins; \
-	} else if (numbins != unit->m_numbins) return; 
+	} else if (numbins != unit->m_numbins) return;
 
 #define GET_BINTOFREQ \
 	if(unit->m_bintofreq==0.f){ \
@@ -256,17 +238,8 @@ struct FFTMutInf : FFTAnalyser_Unit
 
 extern "C"
 {
-	void load(InterfaceTable *inTable);
-
 	void FFTPower_Ctor(FFTPower *unit);
 	void FFTPower_next(FFTPower *unit, int inNumSamples);
-
-	void FFTFlatness_Ctor(FFTAnalyser_Unit *unit);
-	void FFTFlatness_next(FFTAnalyser_Unit *unit, int inNumSamples);
-
-	void FFTPercentile_Ctor(FFTPercentile_Unit *unit);
-	void FFTPercentile_next(FFTPercentile_Unit *unit, int inNumSamples);
-	void FFTPercentile_Dtor(FFTPercentile_Unit *unit);
 
 	void FFTFlux_Ctor(FFTFlux_Unit *unit);
 	void FFTFlux_next(FFTFlux_Unit *unit, int inNumSamples);
@@ -274,10 +247,6 @@ extern "C"
 	void FFTFluxPos_Ctor(FFTFlux_Unit *unit);
 	void FFTFluxPos_next(FFTFlux_Unit *unit, int inNumSamples);
 	void FFTFluxPos_Dtor(FFTFlux_Unit *unit);
-
-	void FFTFlatnessSplitPercentile_Ctor(FFTFlatnessSplitPercentile_Unit *unit);
-	void FFTFlatnessSplitPercentile_next(FFTFlatnessSplitPercentile_Unit *unit, int inNumSamples);
-	void FFTFlatnessSplitPercentile_Dtor(FFTFlatnessSplitPercentile_Unit *unit);
 
 	void FFTDiffMags_Ctor(FFTAnalyser_Unit *unit);
 	void FFTDiffMags_next(FFTAnalyser_Unit *unit, int inNumSamples);
@@ -291,13 +260,13 @@ extern "C"
 	void FFTSubbandPower_Ctor(FFTSubbandPower *unit);
 	void FFTSubbandPower_next(FFTSubbandPower *unit, int inNumSamples);
 	void FFTSubbandPower_Dtor(FFTSubbandPower *unit);
-	
+
 	void PV_MagLog_Ctor(PV_Unit *unit);
 	void PV_MagLog_next(PV_Unit *unit, int inNumSamples);
-	
+
 	void PV_MagExp_Ctor(PV_Unit *unit);
 	void PV_MagExp_next(PV_Unit *unit, int inNumSamples);
-	
+
 	void FFTPhaseDev_Ctor(FFTPhaseDev *unit);
 	void FFTPhaseDev_Dtor(FFTPhaseDev *unit);
 	void FFTPhaseDev_next(FFTPhaseDev *unit, int inNumSamples);
@@ -309,66 +278,37 @@ extern "C"
 	void FFTMKL_Ctor(FFTMKL *unit);
 	void FFTMKL_Dtor(FFTMKL *unit);
 	void FFTMKL_next(FFTMKL *unit, int inNumSamples);
-	
+
 	void PV_Whiten_Ctor(PV_Whiten *unit);
 	void PV_Whiten_next(PV_Whiten *unit, int inNumSamples);
-	
-	void FFTRumble_Ctor(FFTRumble *unit);
-	void FFTRumble_next(FFTRumble *unit, int inNumSamples);
-	
+
 	void FFTSubbandFlatness_Ctor(FFTSubbandFlatness *unit);
 	void FFTSubbandFlatness_next(FFTSubbandFlatness *unit, int inNumSamples);
 	void FFTSubbandFlatness_Dtor(FFTSubbandFlatness *unit);
-	
+
 	void FFTCrest_Ctor(FFTCrest *unit);
 	void FFTCrest_next(FFTCrest *unit, int inNumSamples);
-	
+
 	void FFTSpread_Ctor(FFTSpread *unit);
 	void FFTSpread_next(FFTSpread *unit, int inNumSamples);
-	
+
 	void FFTSlope_Ctor(FFTSlope *unit);
 	void FFTSlope_next(FFTSlope *unit, int inNumSamples);
-	
+
 	void FFTPeak_Ctor(FFTPeak *unit);
 	void FFTPeak_next(FFTPeak *unit, int inNumSamples);
-	
+
 	void PV_MagSmooth_Ctor(PV_MagSmooth *unit);
 	void PV_MagSmooth_next(PV_MagSmooth *unit, int inNumSamples);
 	void PV_MagSmooth_Dtor(PV_MagSmooth *unit);
-	
-	void FFTMutInf_Ctor(FFTMutInf *unit);
-	void FFTMutInf_next(FFTMutInf *unit, int inNumSamples);
-	void FFTMutInf_Dtor(FFTMutInf *unit);
-	
+
 	void PV_MagMulAdd_Ctor(PV_Unit *unit);
 	void PV_MagMulAdd_next(PV_Unit *unit, int inNumSamples);
-}
 
-SCPolarBuf* ToPolarApx(SndBuf *buf)
-{
-	if (buf->coord == coord_Complex) {
-		SCComplexBuf* p = (SCComplexBuf*)buf->data;
-		int numbins = (buf->samples - 2) >> 1;
-		for (int i=0; i<numbins; ++i) {
-			p->bin[i].ToPolarApxInPlace();
-		}
-		buf->coord = coord_Polar;
-	}
+	void PV_ExtractRepeat_Ctor(PV_ExtractRepeat *unit);
+	void PV_ExtractRepeat_next(PV_ExtractRepeat *unit, int inNumSamples);
+	void PV_ExtractRepeat_Dtor(PV_ExtractRepeat *unit);
 
-	return (SCPolarBuf*)buf->data;
-}
-
-SCComplexBuf* ToComplexApx(SndBuf *buf)
-{
-	if (buf->coord == coord_Polar) {
-		SCPolarBuf* p = (SCPolarBuf*)buf->data;
-		int numbins = (buf->samples - 2) >> 1;
-		for (int i=0; i<numbins; ++i) {
-			p->bin[i].ToComplexApxInPlace();
-		}
-		buf->coord = coord_Complex;
-	}
-	return (SCComplexBuf*)buf->data;
 }
 
 InterfaceTable *ft;
@@ -381,7 +321,7 @@ void FFTPower_Ctor(FFTPower *unit)
 {
 	SETCALC(FFTPower_next);
 	ZOUT0(0) = unit->outval = 0.;
-	
+
 	unit->m_square = ZIN0(1) > 0.f;
 	unit->m_normfactor = 0.f;
 }
@@ -402,11 +342,11 @@ void FFTPower_next(FFTPower *unit, int inNumSamples)
 
 	SCComplexBuf *p = ToComplexApx(buf);
 //	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	float total;
 	if(square){
 		total = sc_abs(p->dc) * sc_abs(p->dc) + sc_abs(p->nyq) *  sc_abs(p->nyq);
-		
+
 		for (int i=0; i<numbins; ++i) {
 			float rabs = (p->bin[i].real);
 			float iabs = (p->bin[i].imag);
@@ -414,7 +354,7 @@ void FFTPower_next(FFTPower *unit, int inNumSamples)
 		}
 	}else{
 		total = sc_abs(p->dc) + sc_abs(p->nyq);
-		
+
 		for (int i=0; i<numbins; ++i) {
 			float rabs = (p->bin[i].real);
 			float iabs = (p->bin[i].imag);
@@ -437,25 +377,25 @@ void FFTSubbandPower_Ctor(FFTSubbandPower *unit)
 {
 	SETCALC(FFTSubbandPower_next);
 	ZOUT0(0) = unit->outval = 0.;
-	
+
 	unit->m_square = ZIN0(2) > 0.f;
 	unit->m_normfactor = 0.f;
-	
+
 	// ZIN0(1) tells us how many cutoffs we're looking for
 	int numcutoffs = (int)ZIN0(1);
 	int numbands = numcutoffs+1;
-	
+
 	unit->m_scalemode = (int)ZIN0(3);
-	
+
 	float * outvals = (float*)RTAlloc(unit->mWorld, numbands * sizeof(float));
 	for(int i=0; i<numbands; i++) {
 		outvals[i] = 0.f;
 	}
 	unit->m_outvals = outvals;
-	
+
 	unit->m_cutoffs = (int*)RTAlloc(unit->mWorld, numcutoffs * sizeof(int));
 	unit->m_cutoff_inited = false;
-	
+
 	unit->m_numbands = numbands;
 }
 
@@ -463,7 +403,7 @@ void FFTSubbandPower_next(FFTSubbandPower *unit, int inNumSamples)
 {
 	int numbands = unit->m_numbands;
 	int numcutoffs = numbands - 1;
-	
+
 	// Multi-output equiv of FFTAnalyser_GET_BUF
 	float fbufnum = ZIN0(0);
 	if (fbufnum < 0.f) {
@@ -488,7 +428,7 @@ void FFTSubbandPower_next(FFTSubbandPower *unit, int inNumSamples)
 	}
 	int numbins = (buf->samples - 2) >> 1;
 	// End: Multi-output equiv of FFTAnalyser_GET_BUF
-	
+
 	int scalemode = unit->m_scalemode;
 
 	float normfactor = unit->m_normfactor;
@@ -499,22 +439,22 @@ void FFTSubbandPower_next(FFTSubbandPower *unit, int inNumSamples)
 		else
 			unit->m_normfactor = normfactor = 1.f / (numbins + 2.f);
 	}
-	
+
 	// Now we create the integer lookup list, if it doesn't already exist
 	int * cutoffs = unit->m_cutoffs;
 	if(!unit->m_cutoff_inited){
-		
+
 		float srate = world->mFullRate.mSampleRate;
 		for(int i=0; i < numcutoffs; ++i) {
 			cutoffs[i] = (int)(buf->samples * ZIN0(4 + i) / srate);
 			//Print("Allocated bin cutoff #%d, at bin %d\n", i, cutoffs[i]);
 		}
-		
+
 		unit->m_cutoff_inited = true;
 	}
-	
+
 	SCComplexBuf *p = ToComplexApx(buf);
-	
+
 	// Now we can actually calculate the bandwise subtotals
 	float total = sc_abs(p->dc);
 	if(square){
@@ -539,7 +479,7 @@ void FFTSubbandPower_next(FFTSubbandPower *unit, int inNumSamples)
 			total = 0.f;
 			binaddcount = 0;
 		}
-		
+
 		float rabs = (p->bin[i].real);
 		float iabs = (p->bin[i].imag);
 		magsq = ((rabs*rabs) + (iabs*iabs));
@@ -563,7 +503,7 @@ void FFTSubbandPower_next(FFTSubbandPower *unit, int inNumSamples)
 		else
 			outvals[curband] = total / (binaddcount + 1); // Plus one because of the nyq value
 	}
-	
+
 	// Now we can output the vals
 	for(int i=0; i<numbands; i++) {
 		ZOUT0(i) = outvals[i];
@@ -574,128 +514,6 @@ void FFTSubbandPower_Dtor(FFTSubbandPower *unit)
 {
 	if(unit->m_cutoffs) RTFree(unit->mWorld, unit->m_cutoffs);
 	if(unit->m_outvals) RTFree(unit->mWorld, unit->m_outvals);
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
-void FFTFlatness_next(FFTAnalyser_Unit *unit, int inNumSamples)
-{
-	FFTAnalyser_GET_BUF
-
-	SCComplexBuf *p = ToComplexApx(buf);
-	
-	// Spectral Flatness Measure is geometric mean divided by arithmetic mean.
-	//
-	// In order to calculate geom mean without hitting the precision limit, 
-	//  we use the trick of converting to log, taking the average, then converting back from log.
-	double geommean = log(sc_abs(p->dc)) + log(sc_abs(p->nyq));
-	double mean     = sc_abs(p->dc)      + sc_abs(p->nyq);
-	
-	for (int i=0; i<numbins; ++i) {
-		float rabs = (p->bin[i].real);
-		float iabs = (p->bin[i].imag);
-		float amp = sqrt((rabs*rabs) + (iabs*iabs));
-		geommean += log(amp);
-		mean += amp;
-	}
-
-	double oneovern = 1/(numbins + 2.);
-	geommean = exp(geommean * oneovern); // Average and then convert back to linear
-	mean *= oneovern;
-
-	// Store the val for output in future calls
-	unit->outval = geommean / mean;
-
-	ZOUT0(0) = unit->outval;
-}
-
-void FFTFlatness_Ctor(FFTAnalyser_Unit *unit)
-{
-	SETCALC(FFTFlatness_next);
-	ZOUT0(0) = unit->outval = 0.;
-}
-
-////////////////////////////////////////////////////////////////////////////////////
-
-
-void FFTPercentile_next(FFTPercentile_Unit *unit, int inNumSamples)
-{
-	FFTAnalyser_GET_BUF
-	MAKE_TEMP_BUF
-
-	// Percentile value as a fraction. eg: 0.5 == 50-percentile (median).
-	float fraction = ZIN0(1);
-	bool interpolate = unit->m_interpolate;
-
-	// The magnitudes in *p will be converted to cumulative sum values and stored in *q temporarily
-	SCComplexBuf *p = ToComplexApx(buf);
-	SCComplexBuf *q = (SCComplexBuf*)unit->m_tempbuf;
-	
-	float cumul = sc_abs(p->dc);
-	
-	for (int i=0; i<numbins; ++i) {
-		float real = p->bin[i].real;
-		float imag = p->bin[i].imag;
-		cumul += sqrt(real*real + imag*imag);
-		
-		// A convenient place to store the mag values...
-		q->bin[i].real = cumul;
-	}
-	
-	cumul += sc_abs(p->nyq);
-	
-	float target = cumul * fraction; // The target cumul value, stored in the "real" slots
-
-	float bestposition = 0; // May be linear-interpolated between bins, but not implemented yet
-	           // NB If nothing beats the target (e.g. if fraction is -1) zero Hz is returned
-	float nyqfreq = ((float)unit->mWorld->mSampleRate) * 0.5f;
-	float binpos;
-	for(int i=0; i<numbins; i++) {
-		//Print("Testing %g, at position %i", q->bin[i].real, i);
-		if(q->bin[i].real >= target){
-			if(interpolate && i!=0) {
-				binpos = ((float)i) + 1.f - (q->bin[i].real - target) / (q->bin[i].real - q->bin[i-1].real);
-			} else {
-				binpos = ((float)i) + 1.f;
-			}
-			bestposition = (nyqfreq * binpos) / (float)(numbins+2);
-			//Print("Target %g beaten by %g (at position %i), equating to freq %g\n", 
-			//				target, p->bin[i].real, i, bestposition);
-			break;
-		}
-	}
-/* THIS COUNTDOWN METHOD DEPRECATED IN FAVOUR OF COUNT-UP, for various reasons.
-	for(int i=numbins-1; i>-1; i--) {
-		//Print("Testing %g, at position %i", q->bin[i].real, i);
-		if(q->bin[i].real <= target){
-			bestposition = (nyqfreq * (float)i) / (float)numbins;
-			//Print("Target %g beaten by %g (at position %i), equating to freq %g\n", 
-			//				target, p->bin[i].real, i, bestposition);
-			break;
-		}
-	}
-*/
-
-	// Store the val for output in future calls
-	unit->outval = bestposition;
-
-	ZOUT0(0) = unit->outval;
-}
-
-void FFTPercentile_Ctor(FFTPercentile_Unit *unit)
-{
-	SETCALC(FFTPercentile_next);
-
-//	unit->m_subtotals = (float*)RTAlloc(unit->mWorld, N * sizeof(float));
-	unit->m_interpolate = ZIN0(2) > 0.f;
-
-	ZOUT0(0) = unit->outval = 0.;
-	unit->m_tempbuf = 0;
-}
-
-void FFTPercentile_Dtor(FFTPercentile_Unit *unit)
-{
-	RTFree(unit->mWorld, unit->m_tempbuf);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -709,7 +527,7 @@ void FFTFlux_Ctor(FFTFlux_Unit *unit)
 	unit->m_yesternorm = 1.0f;
 	unit->m_yesterdc = 0.0f;
 	unit->m_yesternyq = 0.0f;
-	
+
 	unit->m_normalise = ZIN0(1) > 0.f; // Whether we want to normalise or not
 
 	unit->outval = 0.f;
@@ -724,17 +542,17 @@ void FFTFlux_next(FFTFlux_Unit *unit, int inNumSamples)
 	if (!unit->m_tempbuf) {
 		unit->m_tempbuf = (float*)RTAlloc(unit->mWorld, numbins * sizeof(float));
 		unit->m_numbins = numbins;
-		
+
 		// Must also ensure the yester is zero'ed
 		// because it will be compared before being filled in FFTFlux calculation
 		memset(unit->m_tempbuf, 0, numbins * sizeof(float));
 	} else if (numbins != unit->m_numbins) return;
-	
+
 	SCPolarBuf *p = ToPolarApx(buf); // Current frame
 	float* yestermags = unit->m_tempbuf; // This is an array storing the yester magnitudes
-	
+
 	float yesternorm = unit->m_yesternorm; // Should have been calculated on prev cycle
-	
+
 	float currnorm;
 	if(unit->m_normalise){
 		// First iteration is to find the sum of magnitudes (to find the normalisation factor):
@@ -749,7 +567,7 @@ void FFTFlux_next(FFTFlux_Unit *unit, int inNumSamples)
 	} else {
 		currnorm = 1.f;
 	}
-	
+
 	// This iteration is the meat of the algorithm. Compare current (normed) bins against prev.
 	float onebindiff  = sc_abs(p->dc  * currnorm) - sc_abs(unit->m_yesterdc  * yesternorm);
 	float fluxsquared = (onebindiff * onebindiff);
@@ -763,12 +581,12 @@ void FFTFlux_next(FFTFlux_Unit *unit, int inNumSamples)
 		// Overwrite yestermag values with current values, so they're available next time
 		yestermags[i] = p->bin[i].mag;
 	}
-	
+
 	// Store the just-calc'ed norm as yesternorm
 	unit->m_yesternorm = currnorm;
 	unit->m_yesterdc = p->dc;
 	unit->m_yesternyq = p->nyq;
-	
+
 	// Store the val for output in future calls
 	unit->outval = sqrt(fluxsquared);
 
@@ -805,15 +623,15 @@ void FFTFluxPos_next(FFTFlux_Unit *unit, int inNumSamples)
 	if (!unit->m_tempbuf) {
 		unit->m_tempbuf = (float*)RTAlloc(unit->mWorld, numbins * sizeof(float));
 		unit->m_numbins = numbins;
-		
+
 		// Must also ensure the yester is zero'ed
 		// because it will be compared before being filled in FFTFlux calculation
 		memset(unit->m_tempbuf, 0, numbins * sizeof(float));
 	} else if (numbins != unit->m_numbins) return;
-	
+
 	SCPolarBuf *p = ToPolarApx(buf); // Current frame
 	float* yestermags = unit->m_tempbuf; // This is an array storing the yester magnitudes
-	
+
 	float yesternorm = unit->m_yesternorm; // Should have been calculated on prev cycle
 
 	float currnorm;
@@ -831,7 +649,7 @@ void FFTFluxPos_next(FFTFlux_Unit *unit, int inNumSamples)
 		currnorm = 1.f;
 	}
 
-	
+
 	// This iteration is the meat of the algorithm. Compare current (normed) bins against prev.
 	float onebindiff  = sc_abs(p->dc  * currnorm) - sc_abs(unit->m_yesterdc  * yesternorm);
 	float fluxsquared = 0.f;
@@ -852,12 +670,12 @@ void FFTFluxPos_next(FFTFlux_Unit *unit, int inNumSamples)
 		// Overwrite yestermag values with current values, so they're available next time
 		yestermags[i] = p->bin[i].mag;
 	}
-	
+
 	// Store the just-calc'ed norm as yesternorm
 	unit->m_yesternorm = currnorm;
 	unit->m_yesterdc = p->dc;
 	unit->m_yesternyq = p->nyq;
-	
+
 	// Store the val for output in future calls
 	unit->outval = sqrt(fluxsquared);
 
@@ -871,114 +689,14 @@ void FFTFluxPos_Dtor(FFTFlux_Unit *unit)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-
-void FFTFlatnessSplitPercentile_next(FFTFlatnessSplitPercentile_Unit *unit, int inNumSamples)
-{
-	FFTAnalyser_GET_BUF
-	MAKE_TEMP_BUF
-
-	// Percentile value as a fraction. eg: 0.5 == 50-percentile (median).
-	float fraction = ZIN0(1);
-
-	// The magnitudes in *p will be converted to cumulative sum values and stored in *q temporarily
-	SCComplexBuf *p = ToComplexApx(buf);
-	SCComplexBuf *q = (SCComplexBuf*)unit->m_tempbuf;
-	
-	// Spectral Flatness Measure is geometric mean divided by arithmetic mean.
-	//
-	// In order to calculate geom mean without hitting the precision limit, 
-	//  we use the trick of converting to log, taking the average, then converting back from log.
-	double geommeanupper = log(sc_abs(p->nyq));
-	double meanupper     = sc_abs(p->nyq);
-	double geommeanlower = log(sc_abs(p->dc));
-	double meanlower     = sc_abs(p->dc);
-
-	float cumul = sc_abs(p->dc);
-	for (int i=0; i<numbins; ++i) {
-		float real = p->bin[i].real;
-		float imag = p->bin[i].imag;
-		float amp = sqrt(real*real + imag*imag);
-		cumul += amp;
-		
-		// A convenient place to store the mag values...
-		// NOTE: The values stored here are NOT real and imag pairs.
-		q->bin[i].real = cumul;
-		q->bin[i].imag = amp;
-	}
-	cumul += sc_abs(p->nyq);
-	
-	float target = cumul * fraction; // The target cumul value, stored in the "real" slots
-
-	int numupper = -1;
-	int numlower = -1;
-	for(int i=numbins-1; i>-1; i--) {
-	
-		float amp = q->bin[i].imag; // This is where I stored the amp earlier.
-		
-		if(numupper == -1) {
-			//Print("Testing %g, at position %i", q->bin[i].real, i);
-			if(q->bin[i].real <= target){ // We are transitioning from upper to lower region
-				//bestposition = (nyqfreq * (float)i) / (float)numbins;
-				//Print("Target %g beaten by %g (at position %i), equating to freq %g\n", 
-				//				target, p->bin[i].real, i, bestposition);
-				geommeanlower += log(amp);
-				meanlower += amp;
-				numupper = numbins - i; // inc nyq, therefore skip the "minus one"
-				numlower = i + 2; // inc DC, therefore "plus two" rather than "plus one"
-			} else { // We're still in the upper portion of the spectrum
-				geommeanupper += log(amp);
-				meanupper += amp;
-			}
-		} else { // We're in the lower portion of the spectrum
-			geommeanlower += log(amp);
-			meanlower += amp;
-		}
-	} // End of iteration backwards over the bins
-	
-	if(numupper == -1) { // Should be very unlikely, but may happen (e.g. if fraction==-1)
-		numupper = numbins + 1; // All, plus nyquist
-		numlower = 1; // Just the DC
-	}
-	
-	geommeanupper = exp(geommeanupper / numupper); // Average and then convert back to linear
-	meanupper /= numupper;
-	geommeanlower = exp(geommeanlower / numlower); // Average and then convert back to linear
-	meanlower /= numlower;
-
-	// Store the val for output in future calls
-	unit->outval  = geommeanlower / meanlower;
-	unit->outval2 = geommeanupper / meanupper;
-
-	ZOUT0(0) = unit->outval;
-	ZOUT0(1) = unit->outval2;
-}
-
-void FFTFlatnessSplitPercentile_Ctor(FFTFlatnessSplitPercentile_Unit *unit)
-{
-	SETCALC(FFTFlatnessSplitPercentile_next);
-
-//	unit->m_subtotals = (float*)RTAlloc(unit->mWorld, N * sizeof(float));
-
-	ZOUT0(0) = unit->outval = 0.;
-	ZOUT0(1) = unit->outval2 = 0.;
-	unit->m_tempbuf = 0;
-}
-
-void FFTFlatnessSplitPercentile_Dtor(FFTFlatnessSplitPercentile_Unit *unit)
-{
-	RTFree(unit->mWorld, unit->m_tempbuf);
-}
-
-////////////////////////////////////////////////////////////////////////////////////
-
 void FFTDiffMags_next(FFTAnalyser_Unit *unit, int inNumSamples)
 {
 
 	FFTAnalyser_GET_BUF2
-	
+
 	SCComplexBuf *p = ToComplexApx(buf1);
 	SCComplexBuf *q = ToComplexApx(buf2);
-	
+
 	// First the DC and nyquist.
 	float diffsum = sc_abs(p->dc - q->dc) + sc_abs(p->nyq - q->nyq);
 
@@ -1008,24 +726,24 @@ void FFTDiffMags_Ctor(FFTAnalyser_Unit *unit)
 void PV_MagSubtract_next(PV_Unit *unit, int inNumSamples)
 {
 	PV_GET_BUF2
-	
+
 	SCPolarBuf *p = ToPolarApx(buf1);
 	SCPolarBuf *q = ToPolarApx(buf2);
-	
+
 	bool zerolimit = ZIN0(2) > 0.f;
-	
+
 	if(zerolimit){
 		// First the DC and nyquist
 		if(p->dc > q->dc)
 			p->dc  = p->dc - q->dc;
 		else
 			p->dc = 0.f;
-			
+
 		if(p->nyq > q->nyq)
 			p->nyq = p->nyq - q->nyq;
 		else
 			p->nyq = 0.f;
-			
+
 		for (int i=0; i<numbins; ++i) {
 			if(p->bin[i].mag > q->bin[i].mag)
 				p->bin[i].mag -= q->bin[i].mag;
@@ -1059,9 +777,9 @@ void PV_MagLog_Ctor(PV_Unit *unit)
 void PV_MagLog_next(PV_Unit *unit, int inNumSamples)
 {
 	PV_GET_BUF
-	
+
 	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	for (int i=0; i<numbins; ++i) {
 		float mag = p->bin[i].mag;
 		p->bin[i].mag = log(mag > SMALLEST_NUM_FOR_LOG ? mag : SMALLEST_NUM_FOR_LOG);
@@ -1079,9 +797,9 @@ void PV_MagExp_Ctor(PV_Unit *unit)
 void PV_MagExp_next(PV_Unit *unit, int inNumSamples)
 {
 	PV_GET_BUF
-	
+
 	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	for (int i=0; i<numbins; ++i) {
 		float mag = p->bin[i].mag;
 		p->bin[i].mag = exp(mag);
@@ -1093,13 +811,13 @@ void PV_MagExp_next(PV_Unit *unit, int inNumSamples)
 void FFTPhaseDev_next(FFTPhaseDev *unit, int inNumSamples)
 {
 	FFTAnalyser_GET_BUF
-	
+
 	// Get the current frame, as polar. NB We don't care about DC or nyquist in this UGen.
 	SCPolarBuf *p = ToPolarApx(buf);
 	int tbpointer;
-	
+
 	float powthresh = ZIN0(2);
-	
+
 	// MAKE_TEMP_BUF but modified:
 	if (!unit->m_tempbuf) {
 		unit->m_tempbuf = (float*)RTAlloc(unit->mWorld, numbins * 2 * sizeof(float));
@@ -1112,18 +830,18 @@ void FFTPhaseDev_next(FFTPhaseDev *unit, int inNumSamples)
 		}
 		unit->m_numbins = numbins;
 	} else if (numbins != unit->m_numbins) return;
-	
+
 	// Retrieve state
 	bool useweighting = unit->m_weight;
 	float *storedvals = unit->m_tempbuf;
-	
+
 	// Note: temp buf is stored in this format: phase[0],d_phase[0],phase[1],d_phase[1], ...
-	
-//	Print("\nbin[10] phase: %g\nbin[10] yesterphase: %g\nbin[10] yesterdiff: %g\n", 
+
+//	Print("\nbin[10] phase: %g\nbin[10] yesterphase: %g\nbin[10] yesterdiff: %g\n",
 //		/*PHASE_REWRAP(*/p->bin[10].phase/*)*/, storedvals[20], storedvals[21]);
-	
+
 	//Print("\npowthresh is %g", powthresh);
-	
+
 	// Iterate through, calculating the deviation from expected value.
 	double totdev = 0.0;
 	tbpointer = 0;
@@ -1131,13 +849,13 @@ void FFTPhaseDev_next(FFTPhaseDev *unit, int inNumSamples)
 	for (int i=0; i<numbins; ++i) {
 		// Thresholding as Brossier did - discard bin's phase deviation if bin's power is minimal
 		if(p->bin[i].mag > powthresh) {
-		
+
 			// Deviation is the *second difference* of the phase, which is calc'ed as curval - yesterval - yesterfirstdiff
 			deviation = p->bin[i].phase - storedvals[tbpointer] - storedvals[tbpointer+1];
 			tbpointer += 2;
 			// Wrap onto +-PI range
 			deviation = PHASE_REWRAP(deviation);
-			
+
 			if(useweighting){
 				totdev += fabs(deviation * p->bin[i].mag);
 			} else {
@@ -1145,7 +863,7 @@ void FFTPhaseDev_next(FFTPhaseDev *unit, int inNumSamples)
 			}
 		}
 	}
-	
+
 	// totdev will be the output, but first we need to fill tempbuf with today's values, ready for tomorrow.
 	tbpointer = 0;
 	float diff;
@@ -1154,9 +872,9 @@ void FFTPhaseDev_next(FFTPhaseDev *unit, int inNumSamples)
 		storedvals[tbpointer++] = p->bin[i].phase; // Storing phase
 		// Wrap onto +-PI range
 		diff = PHASE_REWRAP(diff);
-		
+
 		storedvals[tbpointer++] = diff; // Storing first diff to buf
-		
+
 	}
 
 	// Store the val for output in future calls
@@ -1168,9 +886,9 @@ void FFTPhaseDev_next(FFTPhaseDev *unit, int inNumSamples)
 void FFTPhaseDev_Ctor(FFTPhaseDev *unit)
 {
 	SETCALC(FFTPhaseDev_next);
-	
+
 	unit->m_weight = (ZIN0(1) > 0.f) ? true : false;
-	
+
 	ZOUT0(0) = unit->outval = 0.;
 	unit->m_tempbuf = 0;
 }
@@ -1185,13 +903,13 @@ void FFTPhaseDev_Dtor(FFTPhaseDev *unit)
 void FFTComplexDev_next(FFTComplexDev *unit, int inNumSamples)
 {
 	FFTAnalyser_GET_BUF
-	
+
 	// Get the current frame, as polar. NB We don't care about DC or nyquist in this UGen.
 	SCPolarBuf *p = ToPolarApx(buf);
 	int tbpointer;
-	
+
 	float powthresh = ZIN0(2);
-	
+
 	// MAKE_TEMP_BUF but modified:
 	if (!unit->m_tempbuf) {
 		unit->m_tempbuf = (float*)RTAlloc(unit->mWorld, numbins * 3 * sizeof(float));
@@ -1204,16 +922,16 @@ void FFTComplexDev_next(FFTComplexDev *unit, int inNumSamples)
 		}
 		unit->m_numbins = numbins;
 	} else if (numbins != unit->m_numbins) return;
-	
+
 	// Retrieve state
 	float *storedvals = unit->m_tempbuf;
 	bool rectify = unit->m_rectify;
-	
+
 	// Note: temp buf is stored in this format: mag[0],phase[0],d_phase[0],mag[1],phase[1],d_phase[1], ...
-	
-	
+
+
 	//Print("\npowthresh is %g", powthresh);
-	
+
 	// Iterate through, calculating the deviation from expected value.
 	double totdev = 0.0;
 	tbpointer = 0;
@@ -1231,21 +949,21 @@ void FFTComplexDev_next(FFTComplexDev *unit, int inNumSamples)
 		if(curmag > powthresh) {
 			// If rectifying, ignore decreasing bins
 			if((!rectify) || (curmag >= predmag)){
-				
+
 				// Predict phase as yesterval + yesterfirstdiff
 				predphase = yesterphase + yesterphasediff;
-				
+
 				// Deviation is Euclidean distance between predicted and actual.
 				// In polar coords: sqrt(r1^2 +  r2^2 - r1r2 cos (theta1 - theta2))
 				deviation = sqrt(predmag * predmag + curmag * curmag
 								  - predmag * predmag * cos(PHASE_REWRAP(predphase - p->bin[i].phase))
-								);			
-				
+								);
+
 				totdev += deviation;
 			}
 		}
 	}
-	
+
 	// totdev will be the output, but first we need to fill tempbuf with today's values, ready for tomorrow.
 	tbpointer = 0;
 	float diff;
@@ -1255,9 +973,9 @@ void FFTComplexDev_next(FFTComplexDev *unit, int inNumSamples)
 		storedvals[tbpointer++] = p->bin[i].phase; // Storing phase
 		// Wrap onto +-PI range
 		diff = PHASE_REWRAP(diff);
-		
+
 		storedvals[tbpointer++] = diff; // Storing first diff to buf
-		
+
 	}
 
 	// Store the val for output in future calls
@@ -1271,7 +989,7 @@ void FFTComplexDev_Ctor(FFTComplexDev *unit)
 	SETCALC(FFTComplexDev_next);
 
 	unit->m_rectify = (ZIN0(1) > 0.f) ? true : false;
-	
+
 	ZOUT0(0) = unit->outval = 0.;
 	unit->m_tempbuf = 0;
 }
@@ -1287,12 +1005,12 @@ void FFTComplexDev_Dtor(FFTComplexDev *unit)
 void FFTMKL_next(FFTMKL *unit, int inNumSamples)
 {
 	FFTAnalyser_GET_BUF
-	
+
 	// Get the current frame, as polar. NB We don't care about DC or nyquist in this UGen.
 	SCPolarBuf *p = ToPolarApx(buf);
 	int tbpointer;
 	float eta = ZIN0(1);
-	
+
 	// MAKE_TEMP_BUF but modified:
 	if (!unit->m_tempbuf) {
 		unit->m_tempbuf = (float*)RTAlloc(unit->mWorld, numbins * 1 * sizeof(float));
@@ -1304,12 +1022,12 @@ void FFTMKL_next(FFTMKL *unit, int inNumSamples)
 		}
 		unit->m_numbins = numbins;
 	} else if (numbins != unit->m_numbins) return;
-	
+
 	// Retrieve state
 	float *storedvals = unit->m_tempbuf;
-	
+
 	// Note: for this UGen, temp buf is just mag[0],mag[1],... - we ain't interested in phase etc
-	
+
 	// Iterate through, calculating the Modified Kullback-Liebler distance
 	double totdev = 0.0;
 	tbpointer = 0;
@@ -1318,11 +1036,11 @@ void FFTMKL_next(FFTMKL *unit, int inNumSamples)
 	for (int i=0; i<numbins; ++i) {
 		curmag = p->bin[i].mag;
 		yestermag = storedvals[tbpointer];
-		
+
 		// Here's the main implementation of Brossier's MKL eq'n (eqn 2.9 from his thesis):
 		deviation = sc_abs(curmag) / (sc_abs(yestermag) + eta);
 		totdev += log(1.f + deviation);
-		
+
 		// Store the mag as yestermag
 		storedvals[tbpointer++] = curmag;
 	}
@@ -1350,9 +1068,9 @@ void FFTMKL_Dtor(FFTMKL *unit)
 ////////////////////////////////////////////////////////////////////////////////
 
 void PV_Whiten_Ctor(PV_Whiten *unit){
-	
+
 	SETCALC(PV_Whiten_next);
-	
+
 	ZOUT0(0) = ZIN0(0);
 }
 
@@ -1393,26 +1111,26 @@ void PV_Whiten_next(PV_Whiten *unit, int inNumSamples){
 	int numbins = (buf1->samples - 2) >> 1;
 //	Print("\nibufnum1: %d; ibufnum2: %d", ibufnum1, ibufnum2);
 //	if (buf1->samples != buf2->samples) return;
-	
+
 //	Print("\nnumbins: %d", numbins);
-	
+
 //	memcpy(buf2->data, buf1->data, buf1->samples * sizeof(float));
 
 	SCPolarBuf *indata = ToPolarApx(buf1);
-	
+
 	// This buffer stores numbins+2 amplitude tracks, in "logical" order (DC, bin1, ... nyquist), not in the order produced by the FFT
 	float *pkdata = buf2->data;
-	
+
 	// Update the parameters
 	float relax = ZIN0(2);
 	float relaxcoef = (relax == 0.0f) ? 0.0f : exp(log1/(relax * SAMPLERATE));
 	float floor = ZIN0(3);
 	float smear = ZIN0(4);
 //	unsigned int bindownsample = (int)ZIN0(5);
-	
+
 	float val,oldval;
 	////////////////////// Now for each bin, update the record of the peak value /////////////////////
-	
+
 	val = fabs(indata->dc);	// Grab current magnitude
 	oldval = pkdata[0];
 	// If it beats the amplitude stored then that's our new amplitude; otherwise our new amplitude is a decayed version of the old one
@@ -1420,14 +1138,14 @@ void PV_Whiten_next(PV_Whiten *unit, int inNumSamples){
 		val = val + (oldval - val) * relaxcoef;
 	}
 	pkdata[0] = val; // Store the "amplitude trace" back
-	
+
 	val = fabs(indata->nyq);
 	oldval = pkdata[numbins+1];
 	if(val < oldval) {
 		val = val + (oldval - val) * relaxcoef;
 	}
 	pkdata[numbins+1] = val;
-	
+
 //	Print("-----------Peaks-------\n");
 	for(int i=0; i<numbins; ++i){
 		val = fabs(indata->bin[i].mag);
@@ -1439,7 +1157,7 @@ void PV_Whiten_next(PV_Whiten *unit, int inNumSamples){
 		//Print("%g, ", val);
 	}
 //	Print("\n");
-	
+
 	// Perform smearing now
 	if(smear != 0.f){
 		float oldval, newval;
@@ -1449,79 +1167,21 @@ void PV_Whiten_next(PV_Whiten *unit, int inNumSamples){
 		for(int i=1; i<=numbins; i++){
 			oldval = sc_max(oldval, pkdata[i+1]);
 			newval = sc_max(oldval * smear, pkdata[i]);
-			
+
 			oldval = pkdata[i]; // For next iter
 			pkdata[i] = newval;
 		}
 	}
-	
+
 	//////////////////////////// Now for each bin, rescale the current magnitude ////////////////////////////
 	indata->dc  /= sc_max(floor, pkdata[0]);
 	indata->nyq /= sc_max(floor, pkdata[numbins+1]);
 	for(int i=0; i<numbins; ++i){
 		indata->bin[i].mag /= sc_max(floor, pkdata[i+1]);
 	}
-	
+
 	ZOUT0(0) = fbufnum1;
-	
-}
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
-void FFTRumble_next(FFTRumble *unit, int inNumSamples)
-{
-	FFTAnalyser_GET_BUF
-
-	SCPolarBuf *p = ToPolarApx(buf);
-	
-	GET_FREQTOBIN
-	
-	float pitch = ZIN0(1);
-	bool sqrmode = ZIN0(2) == 1.f;
-	bool normalise = ZIN0(3) > 0.f;
-	
-	int binpos = unit->m_binpos;
-	if(binpos==0){
-		binpos = unit->m_binpos = (int)floorf(pitch * freqtobin);
-	}
-	
-	float total = 0.f;
-	if(sqrmode){
-		for (int i=0; i<binpos; ++i) {
-			total += p->bin[i].mag * p->bin[i].mag;
-		}
-	}else{
-		for (int i=0; i<binpos; ++i) {
-			total += p->bin[i].mag;
-		}
-	}
-	
-	if(normalise){
-		float denom = total;
-		if(sqrmode){
-			for (int i=binpos; i<numbins; ++i) {
-				denom += p->bin[i].mag * p->bin[i].mag;
-			}
-		}else{
-			for (int i=binpos; i<numbins; ++i) {
-				denom += p->bin[i].mag;
-			}
-		}
-		if(denom!=0.f){
-			total /= denom;
-		}
-	}
-	
-	ZOUT0(0) = unit->outval = total;
-}
-
-void FFTRumble_Ctor(FFTRumble *unit)
-{
-	SETCALC(FFTRumble_next);
-	ZOUT0(0) = unit->outval = 0.;
-	
-	unit->m_freqtobin = 0.f;
-	unit->m_binpos = 0.f;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1530,8 +1190,7 @@ void FFTSubbandFlatness_next(FFTSubbandFlatness *unit, int inNumSamples)
 {
 	int numbands = unit->m_numbands;
 	int numcutoffs = numbands - 1;
-	
-	
+
 	// Multi-output equiv of FFTAnalyser_GET_BUF
 	float fbufnum = ZIN0(0);
 	if (fbufnum < 0.f) {
@@ -1542,33 +1201,43 @@ void FFTSubbandFlatness_next(FFTSubbandFlatness *unit, int inNumSamples)
 	}
 	uint32 ibufnum = (uint32)fbufnum;
 	World *world = unit->mWorld;
-	if (ibufnum >= world->mNumSndBufs) ibufnum = 0;
-	SndBuf *buf = world->mSndBufs + ibufnum;
+	SndBuf *buf;
+	if (ibufnum >= world->mNumSndBufs) {
+		int localBufNum = ibufnum - world->mNumSndBufs;
+		Graph *parent = unit->mParent;
+		if(localBufNum <= parent->localBufNum) {
+			buf = parent->mLocalSndBufs + localBufNum;
+		} else {
+			buf = world->mSndBufs;
+		}
+	} else {
+		buf = world->mSndBufs + ibufnum;
+	}
 	int numbins = (buf->samples - 2) >> 1;
 	// End: Multi-output equiv of FFTAnalyser_GET_BUF
-	
+
 	// Now we create the integer lookup list, if it doesn't already exist
 	int * cutoffs = unit->m_cutoffs;
 	if(!unit->m_cutoff_inited){
-		
+
 		float srate = world->mFullRate.mSampleRate;
 		for(int i=0; i < numcutoffs; i++) {
 			cutoffs[i] = (int)(buf->samples * ZIN0(2 + i) / srate);
 			//Print("Allocated bin cutoff #%d, at bin %d\n", i, cutoffs[i]);
 		}
-		
+
 		unit->m_cutoff_inited = true;
 	}
-	
+
 	SCPolarBuf *p = ToPolarApx(buf);
 
 	// Now we can actually calculate the bandwise stuff
 	int binaddcount = 0; // Counts how many bins contributed to the current band
 	int curband = 0;
 	float * outvals = unit->m_outvals;
-	
+
 	double geommean = 0.0, arithmean = 0.0;
-	
+
 	for (int i=0; i<numbins; ++i) {
 		if(i == cutoffs[curband]){
 			// Finish off the mean calculations
@@ -1579,11 +1248,11 @@ void FFTSubbandFlatness_next(FFTSubbandFlatness *unit, int inNumSamples)
 			geommean = arithmean = 0.0;
 			binaddcount = 0;
 		}
-		
+
 		float mag = (p->bin[i].mag);
 		geommean += log(mag);
 		arithmean += mag;
-		
+
 		binaddcount++;
 	}
 
@@ -1606,23 +1275,23 @@ void FFTSubbandFlatness_next(FFTSubbandFlatness *unit, int inNumSamples)
 void FFTSubbandFlatness_Ctor(FFTSubbandFlatness *unit)
 {
 	SETCALC(FFTSubbandFlatness_next);
-	
+
 	// ZIN0(1) tells us how many cutoffs we're looking for
 	int numcutoffs = (int)ZIN0(1);
 	int numbands = numcutoffs+1;
-	
+
 	float * outvals = (float*)RTAlloc(unit->mWorld, numbands * sizeof(float));
 	for(int i=0; i<numbands; i++) {
 		outvals[i] = 0.f;
 	}
 	unit->m_outvals = outvals;
-	
-	unit->m_cutoffs = (int*)RTAlloc(unit->mWorld, 
+
+	unit->m_cutoffs = (int*)RTAlloc(unit->mWorld,
 			numcutoffs * sizeof(int)
 		);
-	
+
 	unit->m_cutoff_inited = false;
-	
+
 	unit->m_numbands = numbands;
 	ZOUT0(0) = unit->outval = 0.;
 }
@@ -1638,10 +1307,10 @@ void FFTSubbandFlatness_Dtor(FFTSubbandFlatness *unit)
 void FFTCrest_Ctor(FFTCrest *unit)
 {
 	SETCALC(FFTCrest_next);
-	
+
 	unit->m_cutoffneedsinit = true;
 	unit->m_freqtobin = 0.f;
-	
+
 	ZOUT0(0) = unit->outval = 1.f;
 }
 
@@ -1649,14 +1318,14 @@ void FFTCrest_next(FFTCrest *unit, int inNumSamples)
 {
 	float freqlo = IN0(1);
 	float freqhi = IN0(2);
-	
+
 	FFTAnalyser_GET_BUF
-	
+
 	//SCPolarBuf *p = ToPolarApx(buf); // Seems buggy...?
 	SCComplexBuf *p = ToComplexApx(buf);
-	
+
 	GET_FREQTOBIN
-	
+
 	if(unit->m_cutoffneedsinit){
 		// Get desired range, convert to bin index
 		unit->m_frombin = (int)(freqtobin * freqlo);
@@ -1665,12 +1334,12 @@ void FFTCrest_next(FFTCrest *unit, int inNumSamples)
 			unit->m_frombin = 0;
 		if(unit->m_tobinp1 > numbins)
 			unit->m_tobinp1 = numbins;
-		
+
 		unit->m_cutoffneedsinit = false;
 	}
 	int frombin = unit->m_frombin;
 	int tobinp1 = unit->m_tobinp1;
-	
+
 	float total = 0.f, scf, sqrmag, peak=0.f;
 	for (int i=frombin; i<tobinp1; ++i) {
 		//sqrmag = p->bin[i].mag * p->bin[i].mag;
@@ -1682,16 +1351,16 @@ void FFTCrest_next(FFTCrest *unit, int inNumSamples)
 		// (2) Add to subtotal
 		total = total + sqrmag;
 	}
-	
+
 	// SCF defined as peak val divided by mean val; in other words, peak * count / total
 	if(total == 0.f)
 		scf = 1.f; // If total==0, peak==0, so algo output is indeterminate; but 1 indicates a perfectly flat spectrum, so we use that
 	else
 		scf = peak * ((float)(tobinp1 - frombin - 1)) / total;
-	
+
 	// Store the val for output in future calls
 	unit->outval = scf;
-	
+
 	ZOUT0(0) = unit->outval;
 }
 
@@ -1701,7 +1370,7 @@ void FFTSpread_Ctor(FFTSpread *unit)
 {
 	SETCALC(FFTSpread_next);
 	ZOUT0(0) = unit->outval = 0.;
-	
+
 	unit->m_bintofreq = 0.f;
 }
 
@@ -1710,11 +1379,11 @@ void FFTSpread_next(FFTSpread *unit, int inNumSamples)
 	FFTAnalyser_GET_BUF
 
 	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	GET_BINTOFREQ
-	
+
 	float centroid = ZIN0(1);
-	
+
 	float  distance = ((numbins + 1) * bintofreq) - centroid;
 	float  mag      = sc_abs(p->nyq);
 	double num      = mag * distance * distance;
@@ -1725,9 +1394,9 @@ void FFTSpread_next(FFTSpread *unit, int inNumSamples)
 		num     += mag * distance * distance;
 		denom   += mag;
 	}
-	
+
 	ZOUT0(0) = unit->outval = (denom==0.0 ? 0.f : (float) num/denom);
-	
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1736,7 +1405,7 @@ void FFTSlope_Ctor(FFTSlope *unit)
 {
 	SETCALC(FFTSlope_next);
 	ZOUT0(0) = unit->outval = 0.;
-	
+
 	unit->m_bintofreq = 0.f;
 }
 
@@ -1745,33 +1414,33 @@ void FFTSlope_next(FFTSlope *unit, int inNumSamples)
 	FFTAnalyser_GET_BUF
 
 	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	GET_BINTOFREQ
-	
+
 	// This is a straightforward linear regression slope on the magnitudes.
-	
+
 	// These vars accumulate as we iter the bins. We start by putting in their values from the DC & Nyquist oddities.
 	double sumx  = (numbins+1) * bintofreq;
 	double sumx2 = sumx * sumx;
 	double sumxy = sumx * sc_abs(p->nyq);
 	double sumy  = sc_abs(p->dc) + sc_abs(p->nyq);
 	double mag, freq;
-	
+
 	for(int i=0; i<numbins; ++i){
 	  mag = p->bin[i].mag;
 	  freq = (i+1) * bintofreq;
-	  
+
 	  sumxy += (freq * mag);
 	  sumx  += freq;
 	  sumy  += mag;
 	  sumx2 += (freq*freq);
 	};
-	
-	float slope = (float)((numbins * sumxy - sumx * sumy) 
+
+	float slope = (float)((numbins * sumxy - sumx * sumy)
 	   / (numbins * sumx2 - sumx * sumx));
-	
+
 	ZOUT0(0) = unit->outval = slope;
-	
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1780,10 +1449,10 @@ void FFTPeak_Ctor(FFTPeak *unit)
 {
 	SETCALC(FFTPeak_next);
 	ZOUT0(0) = unit->outval = 0.;
-	
+
 	unit->m_bintofreq = 0.f;
 	unit->m_freqtobin = 0.f;
-	
+
 	unit->minbin = -99; // flag for the _next func to initialise it
 	unit->minfreq = ZIN0(1);
 	if(unit->minfreq < 0.f) unit->minfreq = 0.f;
@@ -1796,10 +1465,10 @@ void FFTPeak_next(FFTPeak *unit, int inNumSamples)
 	FFTAnalyser_GET_BUF_TWOOUTS
 
 	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	GET_BINTOFREQ
 	GET_FREQTOBIN
-	
+
 	int minbin = unit->minbin;
 	int maxbin = unit->maxbin;
 	if(minbin == -99){
@@ -1811,7 +1480,7 @@ void FFTPeak_next(FFTPeak *unit, int inNumSamples)
 		if(maxbin > numbins)
 			maxbin = unit->maxbin = numbins;
 	}
-	
+
 	// Start off assuming DC is the best...
 	int peakbin=-1; // "-1" meaning DC here, since the DC is not included in the main list
 	float peakmag;
@@ -1821,21 +1490,21 @@ void FFTPeak_next(FFTPeak *unit, int inNumSamples)
 	}else{
 		peakmag = -9999.f; // Will ensure DC gets beaten if not in desired range
 	}
-	
+
 	// ...then check all the others. We neglect nyquist for efficiency purposes. Sorry.
 	float mag;
 	for(int i = minbin; i < maxbin; ++i){
 	  mag = p->bin[i].mag;
-	  
+
 	  if(peakmag < mag){
 		peakmag = mag;
 		peakbin = i;
 	  }
 	};
-	  
+
 	ZOUT0(0) = unit->outval = (peakbin+1) * bintofreq;
 	ZOUT0(1) = unit->outval2 = peakmag;
-	
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1850,9 +1519,9 @@ void PV_MagSmooth_Ctor(PV_MagSmooth *unit)
 void PV_MagSmooth_next(PV_MagSmooth *unit, int inNumSamples)
 {
 	PV_GET_BUF
-	
+
 	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	float* memory = unit->m_memory;
 	if(memory==NULL){
 		memory = unit->m_memory = (float*)RTAlloc(unit->mWorld, (numbins+2) * sizeof(float));
@@ -1863,10 +1532,10 @@ void PV_MagSmooth_next(PV_MagSmooth *unit, int inNumSamples)
 		memory[numbins] = p->dc;
 		memory[numbins+1] = p->nyq;
 	}
-	
+
 	float factor = ZIN0(1);
 	float onemfactor = 1.f - factor;
-	
+
 	// The actual smoothing calculation:
 	for (int i=0; i<numbins; ++i) {
 		memory[i]     = p->bin[i].mag = (memory[i        ] * factor) + (p->bin[i].mag  * onemfactor);
@@ -1882,137 +1551,6 @@ void PV_MagSmooth_Dtor(PV_MagSmooth *unit)
 	}
 }
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void FFTMutInf_Ctor(FFTMutInf *unit)
-{
-	SETCALC(FFTMutInf_next);
-	ZOUT0(0) = unit->outval = 0.;
-	
-	unit->m_frombin = 0;
-	unit->m_tobinp1 = 0;
-	
-	unit->m_numframes = sc_max(1.f, ZIN0(3));
-	unit->m_currentframe = 0;
-	
-	unit->m_magdata = NULL;
-	unit->m_framesums = NULL;
-
-	unit->m_freqtobin = 0.f;
-}
-
-const float FFTMutInf_MinMag = 0.000000001f;
-
-void FFTMutInf_next(FFTMutInf *unit, int inNumSamples)
-{
-	FFTAnalyser_GET_BUF
-
-	SCPolarBuf *p = ToPolarApx(buf);
-	
-	int frombin   = unit->m_frombin;
-	int tobinp1   = unit->m_tobinp1;
-	int numframes = unit->m_numframes;
-	int numbinsused   = unit->m_numbinsused;
-	int currentframe = unit->m_currentframe;
-	float *magdata   = unit->m_magdata;
-	float *framesums = unit->m_framesums;
-	
-	//Print("FFTMutInf currentframe %i, bin range [%i, %i)\n", currentframe, frombin, tobinp1);
-	
-	// OK, now we're in a position to initialise our own structures if not already done
-	if(magdata == NULL){
-
-		GET_FREQTOBIN
-	
-		frombin = ((int)ZIN0(1) * freqtobin)-1;
-		frombin = sc_max(0, frombin);
-		unit->m_frombin = frombin;
-		
-		tobinp1 = ((int)ZIN0(2) * freqtobin)-1;
-		tobinp1 = sc_min(sc_max(frombin+1, tobinp1), numbins);
-		unit->m_tobinp1 = tobinp1;
-		
-		//Print("FFTMutInf RANGE DECISION: freqtobin %g, freq range (%g, %g), bin range [%i, %i)\n", freqtobin, ZIN0(1), ZIN0(2), frombin, tobinp1);
-		
-		numbinsused = unit->m_numbinsused = tobinp1 - frombin;
-		
-		magdata = unit->m_magdata = (float*)RTAlloc(unit->mWorld, numframes * numbinsused * sizeof(float));
-		framesums = unit->m_framesums = (float*)RTAlloc(unit->mWorld, numframes * sizeof(float));
-		//Clear(numframes * numbinsused, magdata);
-		//Clear(numframes, framesums);
-		Fill(numframes * numbinsused, magdata  , FFTMutInf_MinMag);
-		Fill(numframes              , framesums, FFTMutInf_MinMag);
-	}
-	
-	// OK, so now let's write the magnitude data into the current frame
-	float frametotal = 0.f;
-	float *writehere = magdata + (numbinsused * currentframe);
-	for(int i=frombin; i < tobinp1; ++i){
-		*writehere = (p->bin[i].mag);
-		if(*writehere < FFTMutInf_MinMag)
-			*writehere = FFTMutInf_MinMag; // Disallow zero magnitude, because of logarithms later
-		frametotal += *(writehere++);
-	}
-	framesums[currentframe] = frametotal;
-	// currentframe no longer needed so we increment for next time
-	if(++currentframe == numframes){
-		currentframe = 0;
-	}
-	unit->m_currentframe = currentframe;
-	
-	
-	
-	double grandtot = 0.;
-	for(int frame=0; frame<numframes; ++frame){
-		grandtot += framesums[frame];
-	}
-	double loggrandtot = log(grandtot);
-
-	
-	
-	// Now we do the mutual info calculation itself.
-	// MI = double-integral of p(t,f) log( p(t,f) / (p(t)p(f)) )
-	// where we equate p(t,f) to mag(t,f)/totalmag.
-	// Rearranging slightly, this becomes
-	// (1 / grandtot) * double-integral of ( mag(t,f) * ( log( mag(t,f) / (columntot*rowtot) ) + log(grandtot)) )
-	float binsum, amag;
-	double theintegral = 0.;
-	
-//	Print("framesums: %g", framesums[0]);
-	
-	
-//	Print("binsums: ");
-	for(int bin=0; bin<numbinsused; ++bin){
-		// first calc the binsum
-		binsum = 0.f;
-		for(int frame=0; frame<numframes; ++frame){
-			amag = magdata[frame * numbinsused + bin];
-			binsum += amag;
-		}
-//		Print("%g, ", binsum);
-		// now we can add to the integral
-		for(int frame=0; frame<numframes; ++frame){
-			amag = magdata[frame * numbinsused + bin];
-			if(amag != 0.f){
-				theintegral += amag * (log(amag / (binsum * framesums[frame])) + loggrandtot);
-				//RONG theintegral += amag * log(amag / (binsum * framesums[frame]));
-			}
-		}
-	}
-//	Print("grandtot %g, theintegral %g\n", grandtot, theintegral);
-	
-	ZOUT0(0) = unit->outval = theintegral / grandtot;
-	
-}
-void FFTMutInf_Dtor(FFTMutInf *unit)
-{
-	if(unit->m_magdata != NULL){
-		RTFree(unit->mWorld, unit->m_magdata);
-		RTFree(unit->mWorld, unit->m_framesums);
-	}
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
 void PV_MagMulAdd_Ctor(PV_Unit *unit)
@@ -2024,12 +1562,12 @@ void PV_MagMulAdd_Ctor(PV_Unit *unit)
 void PV_MagMulAdd_next(PV_Unit *unit, int inNumSamples)
 {
 	PV_GET_BUF
-	
+
 	SCPolarBuf *p = ToPolarApx(buf);
-	
+
 	float m = ZIN0(1);
 	float a = ZIN0(2);
-	
+
 	p->dc  = p->dc  * m + a;
 	p->nyq = p->nyq * m + a;
 	for (int i=0; i<numbins; ++i) {
@@ -2039,18 +1577,130 @@ void PV_MagMulAdd_next(PV_Unit *unit, int inNumSamples)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void load(InterfaceTable *inTable)
+#define GET_BUF_AT1 \
+	float fbufnum1  = ZIN0(1); \
+	if (fbufnum1 < 0.f) { fbufnum1 = 0.f; } \
+	if (fbufnum1 != unit->m_fbufnum) { \
+		uint32 bufnum = (int)fbufnum1; \
+		World *world = unit->mWorld; \
+		if (bufnum >= world->mNumSndBufs) { \
+			int localBufNum = bufnum - world->mNumSndBufs; \
+			Graph *parent = unit->mParent; \
+			if(localBufNum <= parent->localBufNum) { \
+				unit->m_buf = parent->mLocalSndBufs + localBufNum; \
+			} else { \
+				bufnum = 0; \
+				unit->m_buf = world->mSndBufs + bufnum; \
+			} \
+		} else { \
+			unit->m_buf = world->mSndBufs + bufnum; \
+		} \
+		unit->m_fbufnum = fbufnum1; \
+	} \
+	SndBuf* buf1 = unit->m_buf; \
+	LOCK_SNDBUF(buf1); \
+	float *bufData __attribute__((__unused__)) = buf1->data; \
+	uint32 bufChannels __attribute__((__unused__)) = buf1->channels; \
+	uint32 bufSamples __attribute__((__unused__)) = buf1->samples; \
+	uint32 bufFrames = buf1->frames; \
+	int mask __attribute__((__unused__)) = buf1->mask; \
+	int guardFrame __attribute__((__unused__)) = bufFrames - 2;
+
+void PV_ExtractRepeat_Ctor(PV_ExtractRepeat *unit)
+{
+	unit->m_logmags = NULL;
+	unit->m_cursor = 0;
+	unit->m_fbufnum = -1;
+	SETCALC(PV_ExtractRepeat_next);
+	ZOUT0(0) = ZIN0(0);
+}
+
+void PV_ExtractRepeat_next(PV_ExtractRepeat *unit, int inNumSamples)
+{
+	PV_GET_BUF
+	SCPolarBuf *p = ToPolarApx(buf);
+	GET_BUF_AT1
+
+	if((numbins+2) != bufChannels){
+		printf("PV_ExtractRepeat error: fft magnitude size != bufChannels, %i > %i\n", (numbins+2), bufChannels);
+		return;
+	}
+
+	float loopdursecs    = ZIN0(2);
+	float memorytimesecs = ZIN0(3);
+	bool  which          = ZIN0(4) > 0.f;
+	float ffthopsize     = ZIN0(5);
+	float thresh         = ZIN0(6);
+
+	int loopdurframes = loopdursecs * FULLRATE / ((numbins+numbins+2) * ffthopsize);
+	//printf("PV_ExtractRepeat info: loopdurframes is %i\n", bufFrames);
+	if(loopdurframes > bufFrames){
+		printf("PV_ExtractRepeat warning: loopdurframes > bufFrames, %i > %i\n", loopdurframes, bufFrames);
+		loopdurframes = bufFrames;
+	}
+
+	float* logmags = unit->m_logmags;
+	if(logmags==NULL){
+		logmags = unit->m_logmags = (float*)RTAlloc(unit->mWorld, (numbins+2) * sizeof(float));
+		// Here we zero the buffer, not the logmags, but we do it here as first-run initialisation.
+		memset(bufData, 0, bufChannels * bufFrames * sizeof(float));
+	}
+
+	float mag;
+	for (int i=0; i<numbins; ++i) {
+		mag = p->bin[i].mag;
+		logmags[i]     = log(mag > SMALLEST_NUM_FOR_LOG ? mag : SMALLEST_NUM_FOR_LOG);
+	}
+	// Note, we store the dc and nyquist ON THE END
+	mag = sc_abs(p->dc);
+	logmags[numbins  ] = log(mag > SMALLEST_NUM_FOR_LOG ? mag : SMALLEST_NUM_FOR_LOG);
+	mag = sc_abs(p->nyq);
+	logmags[numbins+1] = log(mag > SMALLEST_NUM_FOR_LOG ? mag : SMALLEST_NUM_FOR_LOG);
+
+	// Advance the recursive-buffer-cursor by one. Let's call the 'current' frame in the recursive buffer R.
+	int cursor = unit->m_cursor + 1;
+	if(cursor >= loopdurframes)
+		cursor = 0;
+	unit->m_cursor = cursor;
+	float* curframe = bufData + (cursor * bufChannels);
+
+	// find (X-R) (the original authors would have taken abs of this too, but that seems harmful to me).
+	// find which bins are (X-R)<t  where t=1. Zero them out (in S).
+	//    (OR do the reverse; user-settable flag, applied here using xors.)
+	for (int i=0; i<numbins; ++i)
+		if((logmags[i] - curframe[i] < thresh) ^ which)
+			p->bin[i].mag = 0;
+	if((logmags[numbins  ] - curframe[numbins  ] < thresh) ^ which)
+		p->dc  = 0;
+	if((logmags[numbins+1] - curframe[numbins+1] < thresh) ^ which)
+		p->nyq = 0;
+
+	// Finally update the recursive buffer by writing X onto it crossfade-style.
+	float writestrength = (memorytimesecs == 0.f) ? 0.f :
+		exp(log001 / (memorytimesecs * FULLRATE / ((numbins+numbins+2) * ffthopsize)));
+	float antiwritestrength = 1.f - writestrength;
+	//printf("PV_ExtractRepeat info: memorytimesecs %g gives write strength %g\n", memorytimesecs, writestrength);
+	for (int i=0; i<numbins+2; ++i) {
+		curframe[i] = (curframe[i] * antiwritestrength) + (logmags[i] * writestrength);
+	}
+}
+
+void PV_ExtractRepeat_Dtor(PV_ExtractRepeat *unit)
+{
+	if(unit->m_logmags) RTFree(unit->mWorld, unit->m_logmags);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+PluginLoad(MCLDFFT)
 {
 	ft= inTable;
 
 	init_SCComplex(inTable);
 
 	(*ft->fDefineUnit)("FFTPower", sizeof(FFTPower), (UnitCtorFunc)&FFTPower_Ctor, 0, 0);
-	(*ft->fDefineUnit)("FFTFlatness", sizeof(FFTAnalyser_Unit), (UnitCtorFunc)&FFTFlatness_Ctor, 0, 0);
-	(*ft->fDefineUnit)("FFTPercentile", sizeof(FFTPercentile_Unit), (UnitCtorFunc)&FFTPercentile_Ctor, (UnitDtorFunc)&FFTPercentile_Dtor, 0);
 	(*ft->fDefineUnit)("FFTFlux", sizeof(FFTFlux_Unit), (UnitCtorFunc)&FFTFlux_Ctor, (UnitDtorFunc)&FFTFlux_Dtor, 0);
 	(*ft->fDefineUnit)("FFTFluxPos", sizeof(FFTFlux_Unit), (UnitCtorFunc)&FFTFluxPos_Ctor, (UnitDtorFunc)&FFTFluxPos_Dtor, 0);
-	(*ft->fDefineUnit)("FFTFlatnessSplitPercentile", sizeof(FFTFlatnessSplitPercentile_Unit), (UnitCtorFunc)&FFTFlatnessSplitPercentile_Ctor, (UnitDtorFunc)&FFTFlatnessSplitPercentile_Dtor, 0);
 	(*ft->fDefineUnit)("FFTDiffMags", sizeof(FFTAnalyser_Unit), (UnitCtorFunc)&FFTDiffMags_Ctor, 0, 0);
 	DefineSimpleUnit(PV_MagSubtract);
 	(*ft->fDefineUnit)("PV_MagLog", sizeof(PV_Unit), (UnitCtorFunc)&PV_MagLog_Ctor, 0, 0);
@@ -2062,18 +1712,18 @@ void load(InterfaceTable *inTable)
 	DefineDtorUnit(FFTMKL);
 
 	DefineSimpleUnit(PV_Whiten);
-	
-	DefineSimpleUnit(FFTRumble);
+
 	DefineSimpleUnit(FFTCrest);
 	DefineSimpleUnit(FFTSpread);
 	DefineSimpleUnit(FFTSlope);
-	
+
 	DefineDtorUnit(FFTSubbandFlatness);
-	
+
 	DefineSimpleUnit(FFTPeak);
-	
+
 	DefineDtorUnit(PV_MagSmooth);
-	DefineDtorUnit(FFTMutInf);
 
 	(*ft->fDefineUnit)("PV_MagMulAdd", sizeof(PV_Unit), (UnitCtorFunc)&PV_MagMulAdd_Ctor, 0, 0);
+
+	DefineDtorUnit(PV_ExtractRepeat);
 }

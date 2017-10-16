@@ -23,15 +23,14 @@
 
 #include <algorithm>            /* for std::min and std::max */
 
-#ifdef NOVA_SIMD
-#include "simd_memory.hpp"
+#include <boost/align/is_aligned.hpp>
+
 #include "simd_peakmeter.hpp"
 
-#ifdef __GNUC__
-#define inline_functions __attribute__ ((flatten))
-#else
-#define inline_functions
-#endif
+#ifdef NOVA_SIMD
+#include "simd_memory.hpp"
+
+#include "function_attributes.h"
 
 #endif
 
@@ -72,7 +71,7 @@ struct Poll : public Unit
 {
 	int m_samplesRemain, m_intervalSamples;
 	float m_trig;
-	float m_lastPoll, m_id;
+	float m_lastPoll;
 	char *m_id_string;
 	bool m_mayprint;
 };
@@ -236,8 +235,6 @@ struct PauseSelfWhenDone : public Unit
 
 extern "C"
 {
-	void load(InterfaceTable *inTable);
-
 	void Trig1_Ctor(Trig1 *unit);
 	void Trig1_next(Trig1 *unit, int inNumSamples);
 	void Trig1_next_k(Trig1 *unit, int inNumSamples);
@@ -375,22 +372,22 @@ extern "C"
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef NOVA_SIMD
-inline_functions void Trig1_next_nova(Trig1 *unit, int inNumSamples);
-inline_functions void Trig1_next_k_nova(Trig1 *unit, int inNumSamples);
+FLATTEN void Trig1_next_nova(Trig1 *unit, int inNumSamples);
+FLATTEN void Trig1_next_k_nova(Trig1 *unit, int inNumSamples);
 #endif
 
 void Trig1_Ctor(Trig1 *unit)
 {
 	if (unit->mCalcRate == calc_FullRate && INRATE(0) != calc_FullRate) {
 #ifdef NOVA_SIMD
-		if (!(BUFLENGTH & 15))
+		if (boost::alignment::is_aligned( BUFLENGTH, 16 ))
 			SETCALC(Trig1_next_k_nova);
 		else
 #endif
 		SETCALC(Trig1_next_k);
 	} else {
 #ifdef NOVA_SIMD
-		if (!(BUFLENGTH & 15))
+		if (boost::alignment::is_aligned( BUFLENGTH, 16 ))
 			SETCALC(Trig1_next_nova);
 		else
 #endif
@@ -399,7 +396,7 @@ void Trig1_Ctor(Trig1 *unit)
 	unit->mCounter = 0;
 	unit->m_prevtrig = 0.f;
 
-	ZOUT0(0) = 0.f;
+	Trig1_next(unit, 1);
 }
 
 void Trig1_next(Trig1 *unit, int inNumSamples)
@@ -561,14 +558,14 @@ void Trig_Ctor(Trig *unit)
 {
 	if (unit->mCalcRate == calc_FullRate && INRATE(0) != calc_FullRate) {
 #ifdef NOVA_SIMD
-		if (!(BUFLENGTH & 15))
+		if (boost::alignment::is_aligned( BUFLENGTH, 16 ))
 			SETCALC(Trig_next_k_nova);
 		else
 #endif
 		SETCALC(Trig_next_k);
 	} else {
 #ifdef NOVA_SIMD
-		if (!(BUFLENGTH & 15))
+		if (boost::alignment::is_aligned( BUFLENGTH, 16 ))
 			SETCALC(Trig_next_nova);
 		else
 #endif
@@ -579,7 +576,7 @@ void Trig_Ctor(Trig *unit)
 	unit->m_prevtrig = 0.f;
 	unit->mLevel = 0.f;
 
-	ZOUT0(0) = 0.f;
+	Trig_next(unit, 1);
 }
 
 void Trig_next(Trig *unit, int inNumSamples)
@@ -769,14 +766,15 @@ void SendTrig_next(SendTrig *unit, int inNumSamples)
 void SendTrig_next_aka(SendTrig *unit, int inNumSamples)
 {
 	float *trig = ZIN(0);
-        float *value = ZIN(2);
+	int id = (int)ZIN0(1);
+	float *value = ZIN(2);
 	float prevtrig = unit->m_prevtrig;
 
 	LOOP1(inNumSamples,
 		float curtrig = ZXP(trig);
-                float curval = ZXP(value);
+		float curval = ZXP(value);
 		if (curtrig > 0.f && prevtrig <= 0.f) {
-			SendTrigger(&unit->mParent->mNode, (int)ZIN0(1), curval);
+			SendTrigger(&unit->mParent->mNode, id, curval);
 		}
 		prevtrig = curtrig;
 	);
@@ -786,6 +784,9 @@ void SendTrig_next_aka(SendTrig *unit, int inNumSamples)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+static void Unit_next_nop(SendReply * unit, int inNumSamples)
+{}
+
 void SendReply_Ctor(SendReply *unit)
 {
 	const int kVarOffset = 3;
@@ -793,28 +794,36 @@ void SendReply_Ctor(SendReply *unit)
 	unit->m_prevtrig = 0.f;
 	unit->m_cmdNameSize = IN0(2);
 	unit->m_valueSize = unit->mNumInputs - unit->m_cmdNameSize - kVarOffset;
+	unit->m_valueOffset = kVarOffset + unit->m_cmdNameSize;
 
 	// allocations
-	unit->m_cmdName = (char*)RTAlloc(unit->mWorld, (unit->m_cmdNameSize + 1) * sizeof(char));
-	for(int i = 0; i < (int)unit->m_cmdNameSize; i++){
+	const int cmdNameAllocSize = (unit->m_cmdNameSize + 1) * sizeof(char);
+	const int valuesAllocSize = unit->m_valueSize * sizeof(float);
+	char * chunk = (char*)RTAlloc(unit->mWorld,cmdNameAllocSize + valuesAllocSize);
+
+	if (!chunk) {
+		Print("SendReply: RT memory allocation failed\n");
+		SETCALC(Unit_next_nop);
+		return;
+	}
+
+	unit->m_cmdName = chunk;
+	unit->m_values  = (float*)(chunk + cmdNameAllocSize);
+
+	for(int i = 0; i < (int)unit->m_cmdNameSize; i++)
 		unit->m_cmdName[i] = (char)IN0(kVarOffset+i);
-	};
+
 	// terminate string
 	unit->m_cmdName[unit->m_cmdNameSize] = 0;
 
-	unit->m_valueOffset = kVarOffset + unit->m_cmdNameSize;
-	unit->m_values = (float*)RTAlloc(unit->mWorld, unit->m_valueSize * sizeof(float));
-
-	if (INRATE(kVarOffset) == calc_FullRate) {
+	if (INRATE(0) == calc_FullRate)
 		SETCALC(SendReply_next_aka);
-	} else {
+	else
 		SETCALC(SendReply_next);
-	}
 }
 
 void SendReply_Dtor(SendReply* unit)
 {
-	RTFree(unit->mWorld, unit->m_values);
 	RTFree(unit->mWorld, unit->m_cmdName);
 }
 
@@ -829,9 +838,9 @@ void SendReply_next(SendReply *unit, int inNumSamples)
 	for(int j = 0; j < inNumSamples; j++) {
 		float curtrig = trig[j];
 		if (curtrig > 0.f && prevtrig <= 0.f) {
-			for(int i=0; i<valueSize; i++) {
+			for (int i=0; i<valueSize; i++)
 				values[i] = IN(i + valueOffset)[0];
-			}
+
 			SendNodeReply(&unit->mParent->mNode, (int)ZIN0(1), unit->m_cmdName, unit->m_valueSize, values);
 		}
 		prevtrig = curtrig;
@@ -843,15 +852,15 @@ void SendReply_next_aka(SendReply *unit, int inNumSamples)
 {
 	float *trig = IN(0);
 	float prevtrig = unit->m_prevtrig;
-	float *invalues = IN(unit->m_valueOffset);
 	float *values = unit->m_values;
 	int valueSize = unit->m_valueSize;
 	int valueOffset = unit->m_valueOffset;
 	for(int j = 0; j < inNumSamples; j++) {
 		float curtrig = trig[j];
 		if (curtrig > 0.f && prevtrig <= 0.f) {
-			for(int i=0; i<valueSize; i++) {
-				values[i] = IN(i + valueOffset)[j];
+			for (int i=0; i<valueSize; i++) {
+				int offset = INRATE( i + valueOffset ) != calc_FullRate ? 0 : j;
+				values[i] = IN(i + valueOffset)[offset];
 			}
 			SendNodeReply(&unit->mParent->mNode, (int)ZIN0(1), unit->m_cmdName, unit->m_valueSize, values);
 		}
@@ -868,22 +877,28 @@ void Poll_Ctor(Poll* unit)
 	if (INRATE(0) == calc_FullRate){
 		if (INRATE(1) == calc_FullRate){
 			SETCALC(Poll_next_aa);
-			} else {
-			SETCALC(Poll_next_ak);
-			}
 		} else {
-		SETCALC(Poll_next_kk);
+			SETCALC(Poll_next_ak);
 		}
+	} else {
+		SETCALC(Poll_next_kk);
+	}
 
 	unit->m_trig = IN0(0);
-	unit->m_id = IN0(3); // number of chars in the id string
-	unit->m_id_string = (char*)RTAlloc(unit->mWorld, ((int)unit->m_id + 1) * sizeof(char));
-	for(int i = 0; i < (int)unit->m_id; i++){
-		unit->m_id_string[i] = (char)IN0(4+i);
-		};
-	unit->m_id_string[(int)unit->m_id] = '\0';
+	const int idSize = (int)IN0(3); // number of chars in the id string
+	unit->m_id_string = (char*)RTAlloc(unit->mWorld, (idSize + 1) * sizeof(char));
 
-	unit->m_mayprint = unit->mWorld->mVerbosity >= 0;
+	if (!unit->m_id_string) {
+		Print("Poll: RT memory allocation failed\n");
+		SETCALC(Unit_next_nop);
+		return;
+	}
+
+	for(int i = 0; i < idSize; i++)
+		unit->m_id_string[i] = (char)IN0(4+i);
+
+	unit->m_id_string[idSize] = '\0';
+	unit->m_mayprint = unit->mWorld->mVerbosity >= -1;
 
 	Poll_next_kk(unit, 1);
 }
@@ -893,17 +908,19 @@ void Poll_Dtor(Poll* unit)
 	RTFree(unit->mWorld, unit->m_id_string);
 }
 
-void Poll_next_aa(Poll *unit, int inNumSamples){
+void Poll_next_aa(Poll *unit, int inNumSamples)
+{
 	float* in = IN(1);
 	float* trig = IN(0);
 	float lasttrig = unit->m_trig;
-	for(int i = 0; i < inNumSamples; i++){
+	for (int i = 0; i < inNumSamples; i++){
 		if((lasttrig <= 0.0) && (trig[i] > 0.0)){
-			if(unit->m_mayprint){
+			if (unit->m_mayprint)
 				Print("%s: %g\n", unit->m_id_string, in[i]);
-			}
-			if(IN0(2) >= 0.0) SendTrigger(&unit->mParent->mNode, (int)IN0(2), in[i]);
-			}
+
+			if (IN0(2) >= 0.0)
+				SendTrigger(&unit->mParent->mNode, (int)IN0(2), in[i]);
+		}
 		lasttrig = trig[i];
 	}
 	unit->m_trig = lasttrig;
@@ -913,10 +930,11 @@ void Poll_next_kk(Poll *unit, int inNumSamples){
 	float in = IN0(1);
 	float trig = IN0(0);
 	if((unit->m_trig <= 0.0) && (trig > 0.0)){
-		if(unit->m_mayprint){
+		if(unit->m_mayprint)
 			Print("%s: %g\n", unit->m_id_string, in);
-		}
-		if(IN0(2) >= 0.0) SendTrigger(&unit->mParent->mNode, (int)IN0(2), in);
+
+		if(IN0(2) >= 0.0)
+			SendTrigger(&unit->mParent->mNode, (int)IN0(2), in);
 	}
 	unit->m_trig = trig;
 }
@@ -954,7 +972,7 @@ void SetResetFF_Ctor(SetResetFF *unit)
 	unit->m_prevreset = 0.f;
 	unit->mLevel = 0.f;
 
-	ZOUT0(0) = 0.f;
+	SetResetFF_next_k(unit, 1);
 }
 
 
@@ -990,10 +1008,14 @@ void SetResetFF_next_k(SetResetFF *unit, int inNumSamples)
 	float prevreset = unit->m_prevreset;
 	float level = unit->mLevel;
 
+	float curtrig = ZXP(trig);
 	if (prevreset <= 0.f && curreset > 0.f) level = 0.f;
+	else if (prevtrig <= 0.f && curtrig > 0.f) level = 1.f;
+	ZXP(out) = level;
+	prevtrig = curtrig;
 
-	LOOP1(inNumSamples,
-		float curtrig = ZXP(trig);
+	LOOP(inNumSamples - 1,
+		curtrig = ZXP(trig);
 		if (prevtrig <= 0.f && curtrig > 0.f) level = 1.f;
 		ZXP(out) = level;
 		prevtrig = curtrig;
@@ -1073,7 +1095,7 @@ void Latch_Ctor(Latch *unit)
 #ifdef NOVA_SIMD
 		if (BUFLENGTH == 64)
 			SETCALC(Latch_next_ak_nova_64);
-		if (!(BUFLENGTH & 15))
+		if (boost::alignment::is_aligned( BUFLENGTH, 16 ))
 			SETCALC(Latch_next_ak_nova);
 		else
 #endif
@@ -1126,7 +1148,7 @@ void Latch_next_aa(Latch *unit, int inNumSamples)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef NOVA_SIMD
-inline_functions void Gate_next_ak_nova(Gate *unit, int inNumSamples)
+FLATTEN void Gate_next_ak_nova(Gate *unit, int inNumSamples)
 {
 	float *trig = ZIN(1);
 	float level = unit->mLevel;
@@ -1139,7 +1161,7 @@ inline_functions void Gate_next_ak_nova(Gate *unit, int inNumSamples)
 		nova::setvec_simd(OUT(0), level, inNumSamples);
 }
 
-inline_functions void Gate_next_ak_nova_64(Gate *unit, int inNumSamples)
+FLATTEN void Gate_next_ak_nova_64(Gate *unit, int inNumSamples)
 {
 	float *trig = ZIN(1);
 	float level = unit->mLevel;
@@ -1161,7 +1183,7 @@ void Gate_Ctor(Gate *unit)
 #ifdef NOVA_SIMD
 		if (BUFLENGTH == 64)
 			SETCALC(Gate_next_ak_nova_64);
-		if (!(BUFLENGTH & 15))
+		if (boost::alignment::is_aligned( BUFLENGTH, 16 ))
 			SETCALC(Gate_next_ak_nova);
 		else
 #endif
@@ -1170,7 +1192,7 @@ void Gate_Ctor(Gate *unit)
 
 	unit->mLevel = 0.f;
 
-	ZOUT0(0) = 0.f;
+	Gate_next_ak(unit, 1);
 }
 
 
@@ -1221,7 +1243,7 @@ void Schmidt_Ctor(Schmidt *unit)
 
 	unit->mLevel = 0.f;
 
-	ZOUT0(0) = 0.f;
+	Schmidt_next(unit, 1);
 }
 
 void Schmidt_next(Schmidt *unit, int inNumSamples)
@@ -1253,7 +1275,7 @@ void PulseDivider_Ctor(PulseDivider *unit)
 	unit->mLevel = 0.f;
 	unit->mCounter = (long)floor(ZIN0(2) + 0.5);
 
-	ZOUT0(0) = 0.f;
+	PulseDivider_next(unit, 1);
 }
 
 
@@ -1302,7 +1324,7 @@ void PulseCount_Ctor(PulseCount *unit)
 	unit->m_prevreset = 0.f;
 	unit->mLevel = 0.f;
 
-	ZOUT0(0) = 0.f;
+	PulseCount_next_k(unit, 1);
 }
 
 
@@ -1393,7 +1415,7 @@ void Stepper_Ctor(Stepper *unit)
 	unit->m_prevreset = 0.f;
 	unit->mLevel = (float)resetval;
 
-	ZOUT0(0) = 0.f;
+	Stepper_next_ak(unit, 1);
 }
 
 
@@ -1487,7 +1509,7 @@ void TDelay_Ctor(TDelay *unit)
 	unit->m_prevtrig = 0.f;
 	unit->mCounter = 0;
 
-	ZOUT0(0) = 0.f;
+	TDelay_next(unit, 1);
 }
 
 
@@ -1874,8 +1896,8 @@ void Peak_next_ak_unroll(Peak *unit, int inNumSamples);
 void Peak_next_ai_unroll(Peak *unit, int inNumSamples);
 
 #ifdef NOVA_SIMD
-inline_functions void Peak_next_ak_k_nova(Peak *unit, int inNumSamples);
-inline_functions void Peak_next_ai_k_nova(Peak *unit, int inNumSamples);
+FLATTEN void Peak_next_ak_k_nova(Peak *unit, int inNumSamples);
+FLATTEN void Peak_next_ai_k_nova(Peak *unit, int inNumSamples);
 #endif
 
 void Peak_Ctor(Peak *unit)
@@ -1990,7 +2012,7 @@ static inline float Peak_unroll_body(Peak *unit, int inNumSamples, float & level
 		float level4 = max(abs(in[4]), level3);
 		float level5 = max(abs(in[5]), level4);
 		float level6 = max(abs(in[6]), level5);
-		float inlevel = abs(in[7]);
+		inlevel = abs(in[7]);
 		float level7 = max(inlevel, level6);
 		out[0] = level0;
 		out[1] = level1;
@@ -2792,6 +2814,224 @@ void PauseSelfWhenDone_next(PauseSelfWhenDone *unit, int inNumSamples)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct SendPeakRMS:
+    public Unit
+{
+	// rate, level lag, replyid, channel count, [channels, ], cmd name size, [cmdname, ]
+	static const int rateIndex = 0;
+	static const int levelLagIndex = 1;
+	static const int replyIdIndex = 2;
+	static const int channelCountIndex = 3;
+	static const int signalStartIndex = 4;
+
+	SendPeakRMS(void)
+	{
+		SendPeakRMS * unit = this;
+
+		mChannelCount = (unsigned int)IN0(channelCountIndex);
+		size_t channelDataAllocSize = mChannelCount * 3 * sizeof(float);
+
+		int cmdSizeIndex = signalStartIndex + mChannelCount;
+		size_t cmdNameSize = IN0(cmdSizeIndex);
+		size_t cmdNameAllocSize = (cmdNameSize + 1) * sizeof(char);
+
+		void * allocData = RTAlloc(unit->mWorld, channelDataAllocSize + cmdNameAllocSize);
+		if (!allocData) {
+			Print("SendPeakRMS: RT memory allocation failed\n");
+			SETCALC(Unit_next_nop);
+			return;
+		}
+
+		memset(allocData, 0, channelDataAllocSize);
+		mChannelData = (float*)allocData;
+
+		char * cmdName = (char*)(allocData) + channelDataAllocSize;
+
+		size_t cmdNameIndex = cmdSizeIndex + 1;
+		for(int i = 0; i < cmdNameSize; i++)
+			cmdName[i] = (char)IN0(cmdNameIndex + i);
+		cmdName[cmdNameSize] = 0;
+
+		if ((FULLBUFLENGTH & 15) == 0) {
+			if (mCalcRate == calc_FullRate)
+				SETCALC(SendPeakRMS::perform_a<true>);
+			else
+				SETCALC(SendPeakRMS::perform_k<true>);
+		} else {
+			if (mCalcRate == calc_FullRate)
+				SETCALC(SendPeakRMS::perform_a<false>);
+			else
+				SETCALC(SendPeakRMS::perform_k<false>);
+		}
+
+		float replyRate = IN0(rateIndex);
+
+		mAudioSamplesPerTick   = FULLRATE / replyRate;
+		mControlSamplesPerTick = BUFRATE  / replyRate;
+
+		mPhaseRemain = (mCalcRate == calc_FullRate) ? mAudioSamplesPerTick
+													: mControlSamplesPerTick;
+
+		float32 lag = ZIN0(levelLagIndex);
+		mB1 = (lag != 0.f) ? exp(log001 / (lag * replyRate))
+							: 0.f;
+	}
+
+	~SendPeakRMS (void)
+	{
+		SendPeakRMS * unit = this;
+		RTFree(unit->mWorld, mChannelData);
+	}
+
+	unsigned int mChannelCount;
+	float * mChannelData;
+
+	float mB1;
+	int mAudioSamplesPerTick;
+	int mControlSamplesPerTick;
+	int mPhaseRemain;
+
+	void performLevelLag(float & out, float y0, float & y1)
+	{
+		if (y0 >= y1)
+			out = y1 = y0;
+		else
+			out = y1 = y0 + mB1 * (y1 - y0);
+	}
+
+	char * getCmdName (void)
+	{
+		void * buffer = mChannelData;
+		return (char*)(buffer) + mChannelCount * 3 * sizeof(float);
+	}
+
+	void sendReply(void)
+	{
+		SendPeakRMS * unit = this;
+		float * reply = (float*)alloca(mChannelCount * 2 * sizeof(float));
+
+
+		for (int i = 0; i != mChannelCount; ++i) {
+			float & maxLevel = reply[2*i];
+			float & rms = reply[2*i + 1];
+
+			performLevelLag(maxLevel, mChannelData[2*i], mChannelData[2*mChannelCount + i]);
+
+			if (INRATE(signalStartIndex + i) == calc_FullRate)
+				rms = std::sqrt(mChannelData[2*i + 1] / (float)mAudioSamplesPerTick);
+			else
+				rms = std::sqrt(mChannelData[2*i + 1] / (float)mControlSamplesPerTick);
+		}
+
+		SendNodeReply(&unit->mParent->mNode, (int)ZIN0(replyIdIndex), getCmdName(), mChannelCount*2, reply);
+		memset(mChannelData, 0, mChannelCount * 2 * sizeof(float));
+	}
+
+	template <bool simd>
+	void analyzeFullBlock(void)
+	{
+		SendPeakRMS * unit = this;
+		for (int i = 0; i != mChannelCount; ++i) {
+			float * in = IN(signalStartIndex + i);
+			int numSamples = INBUFLENGTH(signalStartIndex + i);
+
+			float & level = mChannelData[2*i];
+			float & sqrsum = mChannelData[2*i + 1];
+			if (numSamples == 1)
+				nova::peak_rms_vec(in, &level, &sqrsum, 1);
+			else {
+				if (simd)
+					nova::peak_rms_vec_simd(in, &level, &sqrsum, numSamples);
+				else
+					nova::peak_rms_vec(in, &level, &sqrsum, numSamples);
+			}
+		}
+	}
+
+	void analyzePartialBlock(int firstSample, int samplesToAnalyze)
+	{
+		SendPeakRMS * unit = this;
+		for (int i = 0; i != mChannelCount; ++i) {
+			float * in = IN(signalStartIndex + i) + firstSample;
+			int numSamples = INBUFLENGTH(signalStartIndex + i);
+
+			float & level = mChannelData[2*i];
+			float & sqrsum = mChannelData[2*i + 1];
+			if (numSamples == 1) {
+				if (firstSample == 0)
+					nova::peak_rms_vec(in, &level, &sqrsum, 1);
+			} else {
+				if (!(samplesToAnalyze & 15) && !(firstSample & 3)) // check for unrolling and alignment
+					nova::peak_rms_vec_simd(in, &level, &sqrsum, samplesToAnalyze);
+				else
+					nova::peak_rms_vec(in, &level, &sqrsum, samplesToAnalyze);
+			}
+		}
+	}
+
+	template <bool simd>
+	inline void next_k(int inNumSamples)
+	{
+		mPhaseRemain -= 1;
+
+		if (mPhaseRemain <= 0) {
+			mPhaseRemain += mControlSamplesPerTick;
+			sendReply();
+		}
+
+		analyzeFullBlock<simd>();
+	}
+
+	template <bool simd>
+	inline void next_a(int inNumSamples)
+	{
+		if (mPhaseRemain >= inNumSamples) {
+			mPhaseRemain -= inNumSamples;
+			analyzeFullBlock<simd>();
+		} else {
+			if (mPhaseRemain == 0) {
+				sendReply();
+				mPhaseRemain = mAudioSamplesPerTick;
+			}
+
+			int startSample = 0;
+			int samplesToAnalyze = std::min(mPhaseRemain, inNumSamples);
+			int remain = inNumSamples;
+
+			do {
+				analyzePartialBlock(startSample, samplesToAnalyze);
+
+				startSample += samplesToAnalyze;
+				mPhaseRemain -= samplesToAnalyze;
+				if (mPhaseRemain == 0) {
+					sendReply();
+					mPhaseRemain = mAudioSamplesPerTick;
+				}
+
+				remain -= samplesToAnalyze;
+				samplesToAnalyze = std::min(remain, mPhaseRemain);
+			} while(remain);
+		}
+	}
+
+	template <bool simd>
+	static void perform_k(Unit * unit, int inNumSamples)
+	{
+		static_cast<SendPeakRMS*>(unit)->next_k<simd>(inNumSamples);
+	}
+
+	template <bool simd>
+	static void perform_a(Unit * unit, int inNumSamples)
+	{
+		static_cast<SendPeakRMS*>(unit)->next_a<simd>(inNumSamples);
+	}
+};
+
+static void SendPeakRMS_Ctor(SendPeakRMS * unit) { new(unit) SendPeakRMS (); }
+static void SendPeakRMS_Dtor(SendPeakRMS * unit) { unit->~SendPeakRMS (); }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 PluginLoad(Trigger)
 {
 	ft = inTable;
@@ -2828,4 +3068,6 @@ PluginLoad(Trigger)
 	DefineSimpleUnit(Free);
 	DefineSimpleUnit(FreeSelfWhenDone);
 	DefineSimpleUnit(PauseSelfWhenDone);
+
+	DefineDtorUnit(SendPeakRMS);
 }

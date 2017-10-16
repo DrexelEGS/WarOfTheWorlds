@@ -24,6 +24,8 @@
 #include "SC_CoreAudio.h"
 #include "SC_Prototypes.h"
 #include "SC_HiddenWorld.h"
+#include "SC_WorldOptions.h"
+#include "SC_Time.hpp"
 #include <sys/time.h>
 
 SC_AndroidJNIAudioDriver::SC_AndroidJNIAudioDriver(struct World *inWorld)
@@ -48,7 +50,7 @@ bool SC_AndroidJNIAudioDriver::DriverSetup(int* outNumSamplesPerCallback, double
 #endif
 
 	if(mWorld->mVerbosity >= 0){
-		scprintf("<-SC_AndroidJNIAudioDriver::Setup world %08X, mPreferredHardwareBufferFrameSize %i, mPreferredSampleRate %i, outNumSamplesPerCallback %i, outSampleRate %g\n", 
+		scprintf("<-SC_AndroidJNIAudioDriver::Setup world %p, mPreferredHardwareBufferFrameSize %i, mPreferredSampleRate %i, outNumSamplesPerCallback %i, outSampleRate %g\n", 
 				mWorld, mPreferredHardwareBufferFrameSize, mPreferredSampleRate, *outNumSamplesPerCallback, *outSampleRate);
 	}
 	return true;
@@ -112,8 +114,6 @@ void SC_AndroidJNIAudioDriver::genaudio(short* arri, int numSamplesPassed)
     int64 oscInc = mOSCincrement;
     double oscToSamples = mOSCtoSamples;
 
-    const float rescale = 1.f/32767.f;
-
     // main loop
     for (int i = 0; i < numBufs; ++i, mWorld->mBufCounter++, bufFramePos += bufFrames)
     {
@@ -122,15 +122,11 @@ void SC_AndroidJNIAudioDriver::genaudio(short* arri, int numSamplesPassed)
 
         // copy+touch inputs
         tch = inTouched;
-        float *dst = inBuses;
-        int readindex = (bufFramePos * minInputs);
         for (int k = 0; k < minInputs; ++k)
         {
+             float *dst = inBuses + k * bufFrames;
              // OK, so source is an interleaved array of ints, target is noninterleaved floats
-        	 int readindexlocal = readindex + k;
-             for (int frame = 0; frame < bufFrames; ++frame, readindexlocal += minInputs){
-                 *dst++ = rescale * (float)arri[readindexlocal];
-             }
+             for (int frame = 0; frame < bufFrames; ++frame) *dst++ = (1.f/32767.f) * (float)arri[(bufFramePos+frame) * minInputs + k];
              *tch++ = bufCounter;
         }
 
@@ -156,21 +152,16 @@ void SC_AndroidJNIAudioDriver::genaudio(short* arri, int numSamplesPassed)
 
         // copy touched outputs
         tch = outTouched;
-		readindex = (bufFramePos * minOutputs);
-       	for (int k = 0; k < minOutputs; ++k) {
-			int readindexlocal = readindex + k;
-       		// OK, so the source is noninterleaved floats, target is an interleaved array of ints
-       		if (*tch++ == bufCounter) {
-       			float *src = outBuses + k * bufFrames;
-       			for (int frame = 0; frame < bufFrames; ++frame, readindexlocal += minOutputs){
-       				float val = *src++;
-       				arri[readindexlocal] = (short)(sc_max(sc_min(val, 1.f), -1.f) * 32767.f);
-				}
-       		} else {
-       			for (int frame = 0; frame < bufFrames; ++frame, readindexlocal += minOutputs)
-       				arri[readindexlocal] = 0;
-       		}
-       	}
+        for (int k = 0; k < minOutputs; ++k) {
+        	
+        	// OK, so the source is noninterleaved floats, target is an interleaved array of ints
+            if (*tch++ == bufCounter) {
+                float *src = outBuses + k * bufFrames;
+                for (int frame = 0; frame < bufFrames; ++frame) arri[(bufFramePos+frame) * minOutputs + k] = (short)((*src++) * 32767.f);
+            } else {
+                for (int frame = 0; frame < bufFrames; ++frame) arri[(bufFramePos+frame) * minOutputs + k] = 0;
+            }
+        }
 
         // update buffer time
         oscTime = mOSCbuftime = nextTime;

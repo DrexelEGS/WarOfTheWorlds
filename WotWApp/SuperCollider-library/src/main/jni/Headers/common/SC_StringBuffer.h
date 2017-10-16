@@ -1,7 +1,7 @@
 // emacs:		-*- c++ -*-
 // file:		SC_StringBuffer.h
 // copyright:	2003 stefan kersten <steve@k-hornz.de>
-// cvs:			$Id: SC_StringBuffer.h 9082 2009-04-20 08:38:27Z danstowell $
+// cvs:			$Id$
 
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License as

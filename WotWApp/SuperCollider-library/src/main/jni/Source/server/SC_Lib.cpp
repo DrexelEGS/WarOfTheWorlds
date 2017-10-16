@@ -21,13 +21,13 @@
 
 #include "SC_Lib.h"
 #include "SC_Lib_Cintf.h"
-#include "SC_ComPort.h"
 #include "SC_SequencedCommand.h"
 #include "scsynthsend.h"
 #include <string.h>
 #include <ctype.h>
 #include "SC_Prototypes.h"
 #include "SC_Str4.h"
+#include "SC_WorldOptions.h"
 
 
 void SendDone(ReplyAddress *inReply, const char *inCommandName)
@@ -39,7 +39,7 @@ void SendDone(ReplyAddress *inReply, const char *inCommandName)
 	packet.addtag('s');
 	packet.adds(inCommandName);
 	SendReply(inReply, packet.data(), packet.size());
-};
+}
 
 void SendDoneWithIntValue(ReplyAddress *inReply, const char *inCommandName, int value)
 {
@@ -52,7 +52,7 @@ void SendDoneWithIntValue(ReplyAddress *inReply, const char *inCommandName, int 
 	packet.addtag('i');
 	packet.addi(value);
 	SendReply(inReply, packet.data(), packet.size());
-};
+}
 
 void SendFailure(ReplyAddress *inReply, const char *inCommandName, const char *errString)
 {
@@ -65,7 +65,22 @@ void SendFailure(ReplyAddress *inReply, const char *inCommandName, const char *e
 	packet.adds(inCommandName);
 	packet.adds(errString);
 	SendReply(inReply, packet.data(), packet.size());
-};
+}
+
+void SendFailureWithIntValue(ReplyAddress *inReply, const char *inCommandName, const char *errString, uint32 index)
+{
+	small_scpacket packet;
+	packet.adds("/fail");
+	packet.maketags(4);
+	packet.addtag(',');
+	packet.addtag('s');
+	packet.addtag('s');
+	packet.adds(inCommandName);
+	packet.adds(errString);
+	packet.addtag('i');
+	packet.addi((int)index);
+	SendReply(inReply, packet.data(), packet.size());
+}
 
 void ReportLateness(ReplyAddress *inReply, float32 seconds)
 {
@@ -76,7 +91,7 @@ void ReportLateness(ReplyAddress *inReply, float32 seconds)
 	packet.addtag('f');
 	packet.addf(seconds);
 	SendReply(inReply, packet.data(), packet.size());
-};
+}
 
 SC_NamedObj::SC_NamedObj()
 {
@@ -114,16 +129,17 @@ SCErr SC_LibCmd::Perform(struct World *inWorld, int inSize, char *inData, ReplyA
 	} catch (std::exception& exc) {
 		if(inWorld->mLocalErrorNotification <= 0 && inWorld->mErrorNotification) {
 			CallSendFailureCommand(inWorld, (char*)Name(), exc.what(), inReply);
-			scprintf("FAILURE %s %s\n", (char*)Name(), exc.what());
+			scprintf("FAILURE IN SERVER %s %s\n", (char*)Name(), exc.what());
 		}
 		return kSCErr_Failed;
 	} catch (...) {
 		err = kSCErr_Failed;
 	}
 	if (err && (inWorld->mLocalErrorNotification <= 0 && inWorld->mErrorNotification)) {
-		const char *errstr = SC_ErrorString(err);
-		CallSendFailureCommand(inWorld, (char*)Name(), (char*)errstr, inReply);
-		scprintf("FAILURE %s %s\n", (char*)Name(), (char*)errstr);
+		char errstr[128];
+		SC_ErrorString(err, errstr);
+		CallSendFailureCommand(inWorld, (char*)Name(), errstr, inReply);
+		scprintf("FAILURE IN SERVER %s %s\n", (char*)Name(), errstr);
 	}
 	return err;
 }

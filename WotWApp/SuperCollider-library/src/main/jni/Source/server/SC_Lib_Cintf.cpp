@@ -21,11 +21,11 @@
 
 
 #include "SC_Lib_Cintf.h"
-#include "SC_ComPort.h"
 #include "SC_CoreAudio.h"
 #include "SC_UnitDef.h"
 #include "SC_BufGen.h"
 #include "SC_World.h"
+#include "SC_WorldOptions.h"
 #include "SC_StringParser.h"
 #include "SC_InterfaceTable.h"
 #include "SC_DirUtils.h"
@@ -45,27 +45,13 @@
 #endif
 
 // Plugin directory in resource directory
-#if defined(_WIN32) && defined(_DEBUG)
-# define SC_PLUGIN_DIR_NAME "plugins_debug"
-#else
 # define SC_PLUGIN_DIR_NAME "plugins"
-#endif
 
 // Extension for binary plugins
 #ifndef SC_PLUGIN_EXT
 # define SC_PLUGIN_EXT ".scx"
 #endif
 
-// Symbol of initialization routine when loading plugins
-#ifndef SC_PLUGIN_LOAD_SYM
-
-# if defined(__APPLE__) || defined(SC_IPHONE) || defined(SC_ANDROID)
-#  define SC_PLUGIN_LOAD_SYM "load"
-# else
-#  define SC_PLUGIN_LOAD_SYM "_load"
-# endif
-
-#endif
 
 #ifndef _WIN32
 # include <sys/param.h>
@@ -88,8 +74,8 @@ extern struct InterfaceTable gInterfaceTable;
 SC_LibCmd* gCmdArray[NUMBER_OF_COMMANDS];
 
 void initMiscCommands();
-bool PlugIn_LoadDir(const char *dirname, bool reportError);
-
+static bool PlugIn_LoadDir(const char *dirname, bool reportError);
+std::vector<void*> open_handles;
 #ifdef __APPLE__
 void read_section(const struct mach_header *mhp, unsigned long slide, const char *segname, const char *sectname)
 {
@@ -126,8 +112,33 @@ extern void Test_Load(InterfaceTable *table);
 extern void PhysicalModeling_Load(InterfaceTable *table);
 extern void Demand_Load(InterfaceTable *table);
 extern void DynNoise_Load(InterfaceTable *table);
+extern void FFT_UGens_Load(InterfaceTable *table);
 extern void iPhone_Load(InterfaceTable *table);
 
+
+void deinitialize_library()
+{
+#ifdef _WIN32
+	for(void * ptrhinstance : open_handles){
+		HINSTANCE hinstance = (HINSTANCE)ptrhinstance;
+		void *ptr = (void *)GetProcAddress( hinstance, "unload" );
+		if(ptr){
+			UnLoadPlugInFunc unloadFunc = (UnLoadPlugInFunc)ptr;
+			(*unloadFunc)();
+		}
+	}
+	//FreeLibrary dlclose(handle);
+#else
+	for(void * handle : open_handles){
+		void *ptr = dlsym(handle, "unload");
+		if(ptr){
+			UnLoadPlugInFunc unloadFunc = (UnLoadPlugInFunc)ptr;
+			(*unloadFunc)();
+		}
+	}
+#endif
+	open_handles.clear();
+}
 void initialize_library(const char *uGensPluginPath)
 {
 	gCmdLib     = new HashTable<SC_LibCmd, Malloc>(&gMalloc, 64, true);
@@ -160,6 +171,7 @@ void initialize_library(const char *uGensPluginPath)
 #if defined(SC_IPHONE) && !TARGET_IPHONE_SIMULATOR
 	iPhone_Load(&gInterfaceTable);
 #endif
+	FFT_UGens_Load(&gInterfaceTable);
 	return;
 #endif
 
@@ -180,11 +192,10 @@ void initialize_library(const char *uGensPluginPath)
 			PlugIn_LoadDir(SC_PLUGIN_DIR, true);
 		}
 #endif
-
 		// load default plugin directory
 		char pluginDir[MAXPATHLEN];
 		sc_GetResourceDirectory(pluginDir, MAXPATHLEN);
-		sc_AppendToPath(pluginDir, SC_PLUGIN_DIR_NAME);
+		sc_AppendToPath(pluginDir, MAXPATHLEN, SC_PLUGIN_DIR_NAME);
 
 		if (sc_DirectoryExists(pluginDir)) {
 			PlugIn_LoadDir(pluginDir, true);
@@ -212,6 +223,9 @@ void initialize_library(const char *uGensPluginPath)
 	/* on darwin plugins are lazily loaded (dlopen uses mmap internally), which can produce audible
 		glitches when UGens have to be paged-in. to work around this we preload all the plugins by
 		iterating through their memory space. */
+
+#ifndef __x86_64__
+	/* seems to cause a stack corruption on llvm-gcc-4.2, sdk 10.5 on 10.6 */
 
 	unsigned long images = _dyld_image_count();
 	for(unsigned long i = 0; i < images; i++) {
@@ -245,41 +259,77 @@ void initialize_library(const char *uGensPluginPath)
 		}
 	}
 #endif
+
+#endif
 }
 
-bool PlugIn_Load(const char *filename);
-bool PlugIn_Load(const char *filename)
+typedef int (*InfoFunction)();
+
+bool checkAPIVersion(void * f, const char * filename)
+{
+	if (f) {
+		InfoFunction fn = (InfoFunction)f;
+		if ((*fn)() == sc_api_version)
+			return true;
+	}
+	scprintf("*** ERROR: API Version Mismatch: %s\n", filename);
+	return false;
+}
+
+bool checkServerVersion(void * f, const char * filename)
+{
+	if (f) {
+		InfoFunction fn = (InfoFunction)f;
+		if ((*fn)() == 1)
+			return false;
+	}
+	return true;
+}
+
+static bool PlugIn_Load(const char *filename)
 {
 #ifdef _WIN32
 
-    HINSTANCE hinstance = LoadLibrary( filename );
-    if (!hinstance) {
-        char *s;
-        DWORD lastErr = GetLastError();
-        FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                0, lastErr , 0, (char*)&s, 1, 0 );
-        scprintf("*** ERROR: LoadLibrary '%s' err '%s'\n", filename, s);
-        LocalFree( s );
+	HINSTANCE hinstance = LoadLibrary( filename );
+	if (!hinstance) {
+		char *s;
+		DWORD lastErr = GetLastError();
+		FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, lastErr , MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (char*)&s, 0, NULL );
+		scprintf("*** ERROR: LoadLibrary '%s' err '%s'\n", filename, s);
+		LocalFree( s );
 		return false;
 	}
 
-    void *ptr = (void *)GetProcAddress( hinstance, SC_PLUGIN_LOAD_SYM );
-    if (!ptr) {
-        char *s;
-        FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                0, GetLastError(), 0, (char*)&s, 1, 0 );
-        scprintf("*** ERROR: GetProcAddress %s err '%s'\n", SC_PLUGIN_LOAD_SYM, s);
-        LocalFree( s );
+	void *apiVersionPtr = (void *)GetProcAddress( hinstance, "api_version" );
+	if (!checkAPIVersion(apiVersionPtr, filename)) {
+		FreeLibrary(hinstance);
+		return false;
+	}
+
+	void *serverCheckPtr = (void *)GetProcAddress( hinstance, "server_type" );
+	if (!checkServerVersion(serverCheckPtr , filename)) {
+		FreeLibrary(hinstance);
+		return false;
+	}
+
+	void *ptr = (void *)GetProcAddress( hinstance, "load" );
+	if (!ptr) {
+		char *s;
+		FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, GetLastError() , MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (char*)&s, 0, NULL );
+		scprintf("*** ERROR: GetProcAddress err '%s'\n", s);
+		LocalFree( s );
 
 		FreeLibrary(hinstance);
 		return false;
 	}
 
-    LoadPlugInFunc loadFunc = (LoadPlugInFunc)ptr;
+	LoadPlugInFunc loadFunc = (LoadPlugInFunc)ptr;
 	(*loadFunc)(&gInterfaceTable);
 
-    // FIXME: at the moment we never call FreeLibrary() on a loaded plugin
-
+	// FIXME: at the moment we never call FreeLibrary() on a loaded plugin
+	open_handles.push_back(hinstance);
 	return true;
 
 #else
@@ -292,11 +342,21 @@ bool PlugIn_Load(const char *filename)
 		return false;
 	}
 
-	void *ptr;
+	void *apiVersionPtr = (void *)dlsym( handle, "api_version" );
+	if (!checkAPIVersion(apiVersionPtr, filename)) {
+		dlclose(handle);
+		return false;
+	}
 
-	ptr = dlsym(handle, SC_PLUGIN_LOAD_SYM);
+	void *serverCheckPtr = (void *)dlsym( handle, "server_type" );
+	if (!checkServerVersion(serverCheckPtr , filename)) {
+		dlclose(handle);
+		return false;
+	}
+
+	void *ptr = dlsym(handle, "load");
 	if (!ptr) {
-		scprintf("*** ERROR: dlsym %s err '%s' for '%s'\n", SC_PLUGIN_LOAD_SYM, dlerror(), filename);
+		scprintf("*** ERROR: dlsym load err '%s'\n", dlerror());
 		dlclose(handle);
 		return false;
 	}
@@ -304,12 +364,13 @@ bool PlugIn_Load(const char *filename)
 	LoadPlugInFunc loadFunc = (LoadPlugInFunc)ptr;
 	(*loadFunc)(&gInterfaceTable);
 
+	open_handles.push_back(handle);
 	return true;
 
 #endif
 }
 
-bool PlugIn_LoadDir(const char *dirname, bool reportError)
+static bool PlugIn_LoadDir(const char *dirname, bool reportError)
 {
 	bool success = true;
 
@@ -330,16 +391,16 @@ bool PlugIn_LoadDir(const char *dirname, bool reportError)
 		if (!validItem) break;
 		if (skipItem || (*(diritem+firstCharOffset) == '.')) continue;  // skip files+folders whose first char is a dot
 
-        if (sc_DirectoryExists(diritem)) {
+	if (sc_DirectoryExists(diritem)) {
 			success = PlugIn_LoadDir(diritem, reportError);
-        } else {
+	} else {
 			int dnamelen = strlen(diritem);
 			int extlen = strlen(SC_PLUGIN_EXT);
 			char *extptr = diritem+dnamelen-extlen;
 			if (strncmp(extptr, SC_PLUGIN_EXT, extlen) == 0) {
 				success = PlugIn_Load(diritem);
 			}
-        }
+	}
 
 		if (!success) continue;
 	}

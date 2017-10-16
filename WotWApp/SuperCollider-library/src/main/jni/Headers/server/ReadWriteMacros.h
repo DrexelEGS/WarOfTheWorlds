@@ -25,12 +25,19 @@
 #include "SC_Types.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdexcept>
 
 inline int32 readInt8(FILE *file)
 {
 	int32 res = fgetc(file);
 
 	return res;
+}
+
+inline uint32 readUInt8(FILE *file)
+{
+    uint8 res = (uint8)fgetc(file);
+    return (uint32)res;
 }
 
 inline int32 readInt16_be(FILE *file)
@@ -66,13 +73,21 @@ inline float readFloat_be(FILE *file)
 
 inline void readData(FILE *file, char *outData, size_t inLength)
 {
-	fread(outData, 1, inLength, file);
+	size_t read = fread(outData, 1, inLength, file);
+	if (read != inLength)
+		throw std::runtime_error("readData: read != inLength");
 }
 
 inline int32 readInt8(char *&buf)
 {
 	int32 res = *buf++;
 	return res;
+}
+
+inline uint32 readUInt8(char *&buf)
+{
+    uint8 res = (uint8)*buf++;
+    return (uint32)res;
 }
 
 inline int32 readInt16_be(char *&buf)

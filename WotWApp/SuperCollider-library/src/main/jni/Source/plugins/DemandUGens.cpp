@@ -20,11 +20,11 @@
 
 #include "SC_PlugIn.h"
 #include <cstdio>
+#include <cmath>
+#include <limits>
 
-#ifndef MAXFLOAT
-# include <float.h>
-# define MAXFLOAT FLT_MAX
-#endif
+using std::floor;
+using std::numeric_limits;
 
 static InterfaceTable *ft;
 
@@ -153,6 +153,11 @@ struct Dxrand : public Dseq
 {
 };
 
+struct Dwrand : public Dseq
+{
+	int32 m_weights_size;
+};
+
 struct Dswitch1 : public Unit
 {
 };
@@ -187,10 +192,15 @@ struct Dreset : public Unit
 	float prev_reset;
 };
 
+struct Dconst : public Unit
+{
+  float m_total;
+  float m_runningsum;
+  float m_tolerance;
+};
+
 extern "C"
 {
-void load(InterfaceTable *inTable);
-
 
 
 void Demand_Ctor(Demand *unit);
@@ -254,6 +264,9 @@ void Drand_next(Drand *unit, int inNumSamples);
 void Dxrand_Ctor(Dxrand *unit);
 void Dxrand_next(Dxrand *unit, int inNumSamples);
 
+void Dwrand_Ctor(Dwrand *unit);
+void Dwrand_next(Dwrand *unit, int inNumSamples);
+
 void Dswitch1_Ctor(Dswitch1 *unit);
 void Dswitch1_next(Dswitch1 *unit, int inNumSamples);
 
@@ -266,12 +279,15 @@ void Dstutter_next(Dstutter *unit, int inNumSamples);
 void Dpoll_Ctor(Dpoll *unit);
 void Dpoll_Ctor(Dpoll *unit);
 void Dpoll_next(Dpoll *unit, int inNumSamples);
-	
+
 void Dreset_Ctor(Dreset *unit);
 void Dreset_next(Dreset *unit, int inNumSamples);
 
 void Donce_Ctor(Donce *unit);
 void Donce_next(Donce *unit, int inNumSamples);
+
+void Dconst_Ctor(Dconst *unit);
+void Dconst_next(Dconst *unit, int inNumSamples);
 
 };
 
@@ -306,7 +322,7 @@ void Demand_next_aa(Demand *unit, int inNumSamples)
 			for (int j=2, k=0; j<unit->mNumInputs; ++j, ++k) {
 				float x = DEMANDINPUT_A(j, i + 1);
 				//printf("in  %d %g\n", k, x);
-				if (sc_isnan(x)) x = prevout[k];
+				if (sc_isnan(x)) { x = prevout[k]; unit->mDone = true; }
 				else prevout[k] = x;
 				out[k][i] = x;
 			}
@@ -318,6 +334,9 @@ void Demand_next_aa(Demand *unit, int inNumSamples)
 		prevtrig = ztrig;
 		prevreset = zreset;
 	}
+
+	unit->m_prevtrig = prevtrig;
+	unit->m_prevreset = prevreset;
 }
 
 
@@ -347,7 +366,7 @@ void Demand_next_ak(Demand *unit, int inNumSamples)
 		if (ztrig > 0.f && prevtrig <= 0.f) {
 			for (int j=2, k=0; j<unit->mNumInputs; ++j, ++k) {
 				float x = DEMANDINPUT_A(j, i + 1);
-				if (sc_isnan(x)) x = prevout[k];
+				if (sc_isnan(x)) { x = prevout[k]; unit->mDone = true; }
 				else prevout[k] = x;
 				out[k][i] = x;
 			}
@@ -392,7 +411,7 @@ void Demand_next_ka(Demand *unit, int inNumSamples)
 		if (ztrig > 0.f && prevtrig <= 0.f) {
 			for (int j=2, k=0; j<unit->mNumInputs; ++j, ++k) {
 				float x = DEMANDINPUT_A(j, i + 1);
-				if (sc_isnan(x)) x = prevout[k];
+				if (sc_isnan(x)) { x = prevout[k]; unit->mDone = true; }
 				else prevout[k] = x;
 				out[k][i] = x;
 			}
@@ -424,22 +443,28 @@ void Demand_Ctor(Demand *unit)
 		}
 	}
 
-	unit->m_prevout = (float*) RTAlloc(unit->mWorld, unit->mNumOutputs * sizeof(float));
-	unit->m_out = (float**) RTAlloc(unit->mWorld, unit->mNumOutputs * sizeof(float*));
+	for (int i=0; i<unit->mNumOutputs; ++i)
+		OUT0(i) = 0.f;
 
-	//Print("Demand_Ctor calc %08X\n", unit->mCalcFunc);
+	char * memoryChunk = (char*)RTAlloc(unit->mWorld, unit->mNumOutputs * (sizeof(float) + sizeof(float*)));
+
+	if (!memoryChunk) {
+		Print("Demand: RT memory allocation failed\n");
+		SETCALC(ClearUnitOutputs);
+		return;
+	}
+
+	unit->m_prevout = (float*)memoryChunk;
+	unit->m_out = (float**)(memoryChunk + unit->mNumOutputs * sizeof(float));
+
 	unit->m_prevtrig = 0.f;
 	unit->m_prevreset = 0.f;
-	for (int i=0; i<unit->mNumOutputs; ++i) {
-		unit->m_prevout[i] = 0.f;
-		OUT0(i) = 0.f;
-	}
+	std::fill_n(unit->m_prevout, unit->mNumOutputs, 0.f);
 }
 
 void Demand_Dtor(Demand* unit)
 {
 	if(unit->m_prevout) RTFree(unit->mWorld, unit->m_prevout);
-	if(unit->m_out)     RTFree(unit->mWorld, unit->m_out);
 }
 
 
@@ -490,10 +515,9 @@ void Duty_next_da(Duty *unit, int inNumSamples)
 			out[i] = x;
 
 		} else {
-			count--;
 			out[i] = prevout;
 		}
-
+		count--;
 		prevreset = zreset;
 	}
 
@@ -504,7 +528,6 @@ void Duty_next_da(Duty *unit, int inNumSamples)
 
 void Duty_next_dk(Duty *unit, int inNumSamples)
 {
-
 	float zreset = ZIN0(duty_reset);
 
 	float *out = OUT(0);
@@ -616,7 +639,7 @@ void Duty_Ctor(Duty *unit)
 		}
 	}
 
-	unit->m_count = DEMANDINPUT(duty_dur) * SAMPLERATE;
+	unit->m_count = DEMANDINPUT(duty_dur) * SAMPLERATE - 1;
 	unit->m_prevout = DEMANDINPUT(duty_level);
 	OUT0(0) = unit->m_prevout;
 
@@ -655,9 +678,7 @@ enum {
 
 void DemandEnvGen_next_k(DemandEnvGen *unit, int inNumSamples)
 {
-
 	float zreset = ZIN0(d_env_reset);
-
 
 	float *out = ZOUT(0);
 	double level = unit->m_level;
@@ -670,8 +691,6 @@ void DemandEnvGen_next_k(DemandEnvGen *unit, int inNumSamples)
 	// printf("phase %f level %f \n", phase, level);
 
 	for (int i=0; i<inNumSamples; ++i) {
-
-
 
 		if (zreset > 0.f && unit->m_prevreset <= 0.f) {
 			//printf("reset: %f %f \n", zreset, unit->m_prevreset);
@@ -705,9 +724,6 @@ void DemandEnvGen_next_k(DemandEnvGen *unit, int inNumSamples)
 				DoneAction(doneAction, unit);
 
 			} else {
-
-
-
 				// new time
 
 				float dur = DEMANDINPUT(d_env_dur);
@@ -715,20 +731,23 @@ void DemandEnvGen_next_k(DemandEnvGen *unit, int inNumSamples)
 				if(sc_isnan(dur)) {
 					release = true;
 					running = false;
-					phase = MAXFLOAT;
+					phase = numeric_limits<float>::max();
 				} else {
 					phase = dur * ZIN0(d_env_timeScale) * SAMPLERATE + phase;
 				}
 
 
 				// new shape
+				float fshape = DEMANDINPUT(d_env_shape);
+				if (sc_isnan(fshape))
+					shape = unit->m_shape;
+				else
+					shape = (int)fshape;
+
+				curve = DEMANDINPUT(d_env_curve);
+				if (sc_isnan(curve)) curve = unit->m_curve;
 
 				float count;
-				shape = (int)DEMANDINPUT(d_env_shape);
-				curve = DEMANDINPUT(d_env_curve);
-
-
-				if (sc_isnan(curve)) curve = unit->m_shape;
 				if (phase <= 1.f) {
 					shape = 1; // shape_Linear
 					count = 1.f;
@@ -794,13 +813,13 @@ void DemandEnvGen_next_k(DemandEnvGen *unit, int inNumSamples)
 					} break;
 					case shape_Curve : {
 						if (fabs(curve) < 0.001) {
-							unit->m_shape = 1; // shape_Linear
+							unit->m_shape = shape = 1; // shape_Linear
 							unit->m_grow = (endLevel - level) / count;
 						} else {
 							double a1 = (endLevel - level) / (1.0 - exp(curve));
 							unit->m_a2 = level + a1;
 							unit->m_b1 = a1;
-							unit->m_grow = exp(curve / count);
+							unit->m_grow = exp(curve / ceil( count) );
 						}
 					} break;
 					case shape_Squared : {
@@ -891,25 +910,23 @@ void DemandEnvGen_next_k(DemandEnvGen *unit, int inNumSamples)
 			ZXP(out) = level;
 
 	}
-			float zgate = ZIN0(d_env_gate);
-			if(zgate >= 1.f) {
-				unit->m_running = true;
-			} else if (zgate > 0.f) {
-				unit->m_running = true;
-				release = true;  // release next time.
-			} else {
-				unit->m_running = false; // sample and hold
-			}
+	float zgate = ZIN0(d_env_gate);
+	if(zgate >= 1.f) {
+		unit->m_running = true;
+	} else if (zgate > 0.f) {
+		unit->m_running = true;
+		release = true;  // release next time.
+	} else {
+		unit->m_running = false; // sample and hold
+	}
 
-			unit->m_level = level;
-			unit->m_curve = curve;
-			unit->m_shape = shape;
-			unit->m_prevreset = zreset;
-			unit->m_release = release;
+	unit->m_level = level;
+	unit->m_curve = curve;
+	unit->m_shape = shape;
+	unit->m_prevreset = zreset;
+	unit->m_release = release;
 
-			unit->m_phase = phase;
-
-
+	unit->m_phase = phase;
 }
 
 
@@ -951,7 +968,6 @@ void DemandEnvGen_next_a(DemandEnvGen *unit, int inNumSamples)
 			running = true;
 
 			phase = 0.f;
-
 		}
 
 		prevreset = zreset;
@@ -969,9 +985,6 @@ void DemandEnvGen_next_a(DemandEnvGen *unit, int inNumSamples)
 				DoneAction(doneAction, unit);
 
 			} else {
-
-
-
 				// new time
 
 				float dur = DEMANDINPUT_A(d_env_dur, i + 1);
@@ -979,19 +992,23 @@ void DemandEnvGen_next_a(DemandEnvGen *unit, int inNumSamples)
 				if(sc_isnan(dur)) {
 					release = true;
 					running = false;
-					phase = MAXFLOAT;
+					phase = numeric_limits<float>::max();
 				} else {
 					phase = dur * ZIN0(d_env_timeScale) * SAMPLERATE + phase;
 				}
 
 				// new shape
 				float count;
-				curve = DEMANDINPUT_A(d_env_shape, i + 1);
-				shape = (int)DEMANDINPUT_A(d_env_shape, i + 1);
+				curve = DEMANDINPUT_A(d_env_curve, i + 1);
 
 				// printf("shapes: %i \n", shape);
-				if (sc_isnan(curve)) curve = unit->m_shape;
-				if (sc_isnan(shape)) shape = unit->m_shape;
+				if (sc_isnan(curve)) curve = unit->m_curve;
+
+				float fshape = DEMANDINPUT_A(d_env_shape, i + 1);
+				if (sc_isnan(fshape))
+					shape = unit->m_shape;
+				else
+					shape = (int)fshape;
 
 				if (phase <= 1.f) {
 					shape = 1; // shape_Linear
@@ -1056,13 +1073,13 @@ void DemandEnvGen_next_a(DemandEnvGen *unit, int inNumSamples)
 					} break;
 					case shape_Curve : {
 						if (fabs(curve) < 0.001) {
-							unit->m_shape = 1; // shape_Linear
+							unit->m_shape = shape = 1; // shape_Linear
 							unit->m_grow = (endLevel - level) / count;
 						} else {
 							double a1 = (endLevel - level) / (1.0 - exp(curve));
 							unit->m_a2 = level + a1;
 							unit->m_b1 = a1;
-							unit->m_grow = exp(curve / count);
+							unit->m_grow = exp(curve / ceil( count ) );
 						}
 					} break;
 					case shape_Squared : {
@@ -1167,7 +1184,6 @@ void DemandEnvGen_next_a(DemandEnvGen *unit, int inNumSamples)
 	unit->m_prevreset = prevreset;
 	unit->m_release = release;
 	unit->m_phase = phase;
-
 }
 
 
@@ -1558,6 +1574,7 @@ void Dseq_next(Dseq *unit, int inNumSamples)
 			float x = DEMANDINPUT_A(0, inNumSamples);
 			unit->m_repeats = sc_isnan(x) ? 0.f : floor(x + 0.5f);
 		}
+		int attempts = 0;
 		while (true) {
 			//Print("   unit->m_index %d   unit->m_repeatCount %d\n", unit->m_index, unit->m_repeatCount);
 			if (unit->m_index >= unit->mNumInputs) {
@@ -1588,6 +1605,11 @@ void Dseq_next(Dseq *unit, int inNumSamples)
 				//Print("   unit->m_index %d   OUT0(0) %g\n", unit->m_index, OUT0(0));
 				unit->m_index++;
 				unit->m_needToResetChild = true;
+				return;
+			}
+
+			if (attempts++ > unit->mNumInputs) {
+				Print("Warning: empty sequence in Dseq\n");
 				return;
 			}
 		}
@@ -1769,6 +1791,77 @@ void Dxrand_Ctor(Dxrand *unit)
 	OUT0(0) = 0.f;
 }
 
+#define WINDEX \
+float w, sum = 0.0; \
+float r = unit->mParent->mRGen->frand(); \
+for (int i=0; i<weights_size; ++i) { \
+	w = IN0(2 + i); \
+	sum += w; \
+	if (sum >= r) { \
+		unit->m_index = i + offset; \
+		break; \
+	} \
+} \
+
+
+void Dwrand_next(Dwrand *unit, int inNumSamples)
+{
+	int offset = unit->m_weights_size + 2;
+	int weights_size = unit->mNumInputs - offset;
+	if (inNumSamples) {
+
+		if (unit->m_repeats < 0.) {
+			float x = DEMANDINPUT_A(0, inNumSamples);
+			unit->m_repeats = sc_isnan(x) ? 0.f : floor(x + 0.5f);
+		}
+		while (true) {
+
+			if (unit->m_repeatCount >= unit->m_repeats) {
+				OUT0(0) = NAN;
+				return;
+			}
+
+			if (ISDEMANDINPUT(unit->m_index)) {
+				if (unit->m_needToResetChild) {
+					unit->m_needToResetChild = false;
+					RESETINPUT(unit->m_index);
+				}
+				float x = DEMANDINPUT_A(unit->m_index, inNumSamples);
+				if (sc_isnan(x)) {
+
+					WINDEX;
+					unit->m_repeatCount++;
+					unit->m_needToResetChild = true;
+				} else {
+					OUT0(0) = x;
+					return;
+				}
+			} else {
+				OUT0(0) = DEMANDINPUT_A(unit->m_index, inNumSamples);
+				WINDEX;
+				unit->m_repeatCount++;
+				unit->m_needToResetChild = true;
+				return;
+			}
+		}
+	} else {
+		unit->m_repeats = -1.f;
+		unit->m_repeatCount = 0;
+		unit->m_needToResetChild = true;
+		WINDEX;
+	}
+}
+
+void Dwrand_Ctor(Dwrand *unit)
+{
+	SETCALC(Dwrand_next);
+	unit->m_weights_size = IN0(1);
+	Dwrand_next(unit, 0);
+	OUT0(0) = 0.f;
+}
+
+
+
 static void Dshuf_scramble(Dshuf *unit);
 
 void Dshuf_next(Dshuf *unit, int inNumSamples)
@@ -1843,19 +1936,22 @@ void Dshuf_scramble(Dshuf *unit) {
 
 void Dshuf_Ctor(Dshuf *unit)
 {
-	int32 i, size;
+	OUT0(0) = 0.f;
 
-	size = (int32)(unit->mNumInputs) - 1;
-
+	uint32 size = (unit->mNumInputs) - 1;
 	unit->m_indices = (int32*)RTAlloc(unit->mWorld, size * sizeof(int32));
 
-	for(i=0; i < size; ++i) {
-		unit->m_indices[i] = i + 1;
+	if (!unit->m_indices) {
+		Print("Dshuf: RT memory allocation failed\n");
+		SETCALC(ClearUnitOutputs);
+		return;
 	}
+
+	for(uint32 i=0; i < size; ++i)
+		unit->m_indices[i] = i + 1;
 
 	SETCALC(Dshuf_next);
 	Dshuf_next(unit, 0);
-	OUT0(0) = 0.f;
 }
 
 void Dshuf_Dtor(Dshuf *unit)
@@ -1892,26 +1988,23 @@ void Dswitch1_Ctor(Dswitch1 *unit)
 
 void Dswitch_next(Dswitch *unit, int inNumSamples)
 {
-	int index;
-	float ival;
 	if (inNumSamples) {
 		float val = DEMANDINPUT_A(unit->m_index, inNumSamples);
 		//printf("index: %i\n", (int) val);
 		if(sc_isnan(val)) {
-			ival = DEMANDINPUT_A(0, inNumSamples);
+			float ival = DEMANDINPUT_A(0, inNumSamples);
 
-			if(sc_isnan(ival)) {
-				OUT0(0) = ival;
-				return;
+			if(sc_isnan(ival))
+				val = ival;
+			else {
+				int index = (int32)floor(ival + 0.5f);
+				index = sc_wrap(index, 0, unit->mNumInputs - 2) + 1;
+				val = DEMANDINPUT_A(index, inNumSamples);
+
+				RESETINPUT(unit->m_index);
+				// printf("resetting index: %i\n", unit->m_index);
+				unit->m_index = index;
 			}
-
-			index = (int32)floor(ival + 0.5f);
-			index = sc_wrap(index, 0, unit->mNumInputs - 2) + 1;
-			val = DEMANDINPUT_A(unit->m_index, inNumSamples);
-
-			RESETINPUT(unit->m_index);
-			// printf("resetting index: %i\n", unit->m_index);
-			unit->m_index = index;
 		}
 		OUT0(0) = val;
 
@@ -1920,7 +2013,7 @@ void Dswitch_next(Dswitch *unit, int inNumSamples)
 		for (int i=0; i<unit->mNumInputs; ++i) {
 			RESETINPUT(i);
 		}
-		index = (int32)floor(DEMANDINPUT(0) + 0.5f);
+		int index = (int32)floor(DEMANDINPUT(0) + 0.5f);
 		index = sc_wrap(index, 0, unit->mNumInputs - 1) + 1;
 		unit->m_index = index;
 	}
@@ -1979,6 +2072,68 @@ void Dstutter_Ctor(Dstutter *unit)
 
 //////////////////////////////
 
+void Dconst_next(Dconst *unit, int inNumSamples)
+{
+	float total, tolerance;
+
+	if (inNumSamples) {
+		if(sc_isnan(unit->m_runningsum)) {
+			OUT0(0) = NAN;
+			return;
+		}
+
+		if (unit->m_total < 0.f) {
+
+			total = DEMANDINPUT_A(0, inNumSamples);
+			tolerance = DEMANDINPUT_A(2, inNumSamples);
+			if(sc_isnan(total) || sc_isnan(tolerance)) {
+				OUT0(0) = NAN;
+				return;
+			}
+			unit->m_total = total;
+			unit->m_tolerance = tolerance;
+
+		} {
+			total = unit->m_total;
+			tolerance = unit->m_tolerance;
+		}
+
+		float val = DEMANDINPUT_A(1, inNumSamples);
+
+		if(sc_isnan(val)) {
+			OUT0(0) = NAN;
+			return;
+		} else {
+			float runningsum = unit->m_runningsum + val;
+			if((runningsum > total) || (fabs(total - runningsum) <= tolerance)) {
+				OUT0(0) = total - unit->m_runningsum;
+				unit->m_runningsum = NAN;	// stop next time
+			} else {
+				unit->m_runningsum = runningsum;
+				OUT0(0) = val;
+			}
+		}
+
+	} else {
+
+		unit->m_total = -1.f;
+		unit->m_runningsum = 0.f;
+		RESETINPUT(0);
+		RESETINPUT(1);
+		RESETINPUT(2);
+
+	}
+}
+
+void Dconst_Ctor(Dconst *unit)
+{
+	SETCALC(Dconst_next);
+	Dconst_next(unit, 0);
+	OUT0(0) = 0.f;
+}
+
+//////////////////////////////
+
 
 
 void Dpoll_next(Dpoll *unit, int inNumSamples)
@@ -1998,14 +2153,24 @@ void Dpoll_next(Dpoll *unit, int inNumSamples)
 
 void Dpoll_Ctor(Dpoll *unit)
 {
-	SETCALC(Dpoll_next);
-	unit->m_id = IN0(3); // number of chars in the id string
-	unit->m_id_string = (char*)RTAlloc(unit->mWorld, ((int)unit->m_id + 1) * sizeof(char));
-	for(int i = 0; i < (int)unit->m_id; i++) {
-		unit->m_id_string[i] = (char)IN0(4+i);
+	OUT0(0) = 0.f;
+
+	const int idStringSize = (int)IN0(3);
+
+	unit->m_id_string = (char*)RTAlloc(unit->mWorld, (idStringSize + 1) * sizeof(char));
+
+	if (!unit->m_id_string) {
+		Print("Dpoll: RT memory allocation failed\n");
+		SETCALC(ClearUnitOutputs);
+		return;
 	}
-	unit->m_id_string[(int)unit->m_id] = '\0';
-	unit->m_mayprint = unit->mWorld->mVerbosity >= 0;
+
+	for(int i = 0; i < idStringSize; i++)
+		unit->m_id_string[i] = (char)IN0(4+i);
+
+	SETCALC(Dpoll_next);
+	unit->m_id_string[idStringSize] = '\0';
+	unit->m_mayprint = unit->mWorld->mVerbosity >= -1;
 	OUT0(0) = 0.f;
 }
 
@@ -2101,8 +2266,13 @@ inline double sc_loop(Unit *unit, double in, double hi, int loop)
 
 #define D_GET_BUF \
 	float fbufnum  = DEMANDINPUT_A(0, inNumSamples);; \
+	if (sc_isnan(fbufnum)) { \
+		OUT0(0) = NAN; \
+		return; \
+	} \
+	fbufnum = sc_max(0.f, fbufnum); \
 	if (fbufnum != unit->m_fbufnum) { \
-		uint32 bufnum = (int)fbufnum; \
+		int bufnum = (int)fbufnum; \
 		World *world = unit->mWorld; \
 		if (bufnum < 0) { bufnum = 0; } \
 		if (bufnum >= world->mNumSndBufs) { \
@@ -2130,8 +2300,13 @@ inline double sc_loop(Unit *unit, double in, double hi, int loop)
 
 #define D_GET_BUF_SHARED \
 	float fbufnum  = DEMANDINPUT_A(0, inNumSamples);; \
+	if (sc_isnan(fbufnum)) { \
+		OUT0(0) = NAN; \
+		return; \
+	} \
+	fbufnum = sc_max(0.f, fbufnum); \
 	if (fbufnum != unit->m_fbufnum) { \
-		uint32 bufnum = (int)fbufnum; \
+		int bufnum = (int)fbufnum; \
 		World *world = unit->mWorld; \
 		if (bufnum < 0) { bufnum = 0; } \
 		if (bufnum >= world->mNumSndBufs) { \
@@ -2272,11 +2447,13 @@ PluginLoad(Demand)
 	DefineSimpleUnit(Dbufrd);
 	DefineSimpleUnit(Dbufwr);
 	DefineSimpleUnit(Drand);
+	DefineSimpleUnit(Dwrand);
 	DefineSimpleUnit(Dxrand);
 	DefineDtorUnit(Dshuf);
 	DefineSimpleUnit(Dswitch1);
 	DefineSimpleUnit(Dswitch);
 	DefineSimpleUnit(Dstutter);
+	DefineSimpleUnit(Dconst);
 	DefineSimpleUnit(Donce);
 	DefineSimpleUnit(Dreset);
 	DefineDtorUnit(Dpoll);

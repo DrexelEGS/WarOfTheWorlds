@@ -22,29 +22,55 @@
 #define _SC_WIN32UTILS_H
 
 #ifdef _WIN32
+
+#ifdef IN
+#define SC_IN IN
+#undef IN
+#endif
+
+#ifdef OUT
+#define SC_OUT OUT
+#undef OUT
+#endif
+
 #include <stdio.h>
 #include <winsock2.h>
-#include <pthread.h>
+#undef IN
+#undef OUT
+#ifdef SC_IN
+#define IN SC_IN
+#endif
+
+#ifdef SC_OUT
+#define OUT SC_OUT
+#endif
 
 // wrappers for unix replacements
-#define gettimeofday win32_gettimeofday
 #define basename win32_basename
 #define dirname win32_dirname
-#define nanosleep win32_nanosleep
 #define pipe win32_pipe
+typedef int pid_t;
+
+#if _MSC_VER
+#define snprintf _snprintf
+#endif
 
 void win32_ReplaceCharInString(char* string, int len, char src, char dst);
 // Finds the parent folder of a specified path pattern (including trailing slash)
 void win32_ExtractContainingFolder(char* folder,const char* pattern,int maxChars);
+void win32_GetKnownFolderPath(int folderId, char *dest, int size);
 void win32_synctimes();
-void win32_gettimeofday(timeval* tv, void*);
-void win32_GetHomeFolder(char* homeFolder, int bufLen);
 char* win32_basename(char* path);
 char* win32_dirname(char* path);
-int win32_nanosleep (const struct timespec *requested_time, struct timespec *remaining);
 int win32_pipe(int handles[2]);
 int win32_piperead(int s, char *buf, int len);
 int win32_pipewrite(int s, char *buf, int len);
+
+// alloca
+#include <malloc.h>
+#ifndef alloca // MinGW has alloca defined in malloc.h, MSVC not
+# define alloca _alloca
+#endif
 
 #endif //_WIN32
 #endif // SC_WIN32UTILS_H

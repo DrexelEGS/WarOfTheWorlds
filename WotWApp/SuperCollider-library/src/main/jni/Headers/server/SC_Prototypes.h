@@ -23,6 +23,8 @@
 #define _SC_Prototypes_
 
 #include <ctype.h> // for size_t
+#include <cstdlib>
+#include <cstring>
 
 #include "SC_Types.h"
 #include "scsynthsend.h"
@@ -32,6 +34,7 @@
 // replacement for calloc.
 // calloc lazily zeroes memory on first touch. This is good for most purposes, but bad for realtime audio.
 void* zalloc(size_t n, size_t size);
+void zfree(void* ptr);
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -40,7 +43,6 @@ void World_Start(World *inWorld);
 void World_SetSampleRate(struct World *inWorld, double inSampleRate);
 
 extern "C" {
-void World_Cleanup(World *inWorld);
 void* World_Alloc(struct World *inWorld, size_t inByteSize);
 void* World_Realloc(struct World *inWorld, void *inPtr, size_t inByteSize);
 void World_Free(struct World *inWorld, void *inPtr);
@@ -116,13 +118,13 @@ void Graph_MapControl(Graph* inGraph, int32 inHash, int32 *inName, uint32 inInde
 void Graph_MapAudioControl(Graph* inGraph, uint32 inIndex, uint32 inBus);
 void Graph_MapAudioControl(Graph* inGraph, int32 inHash, int32 *inName, uint32 inIndex, uint32 inBus);
 void Graph_Trace(Graph *inGraph);
-void Graph_RemoveID(World* inWorld, Graph *inGraph);
 
 ////////////////////////////////////////////////////////////////////////
 
 int Node_New(struct World *inWorld, struct NodeDef *def, int32 inID, struct Node **outNode);
 void Node_Dtor(struct Node *inNode);
 void Node_Remove(struct Node* s);
+void Node_RemoveID(Node *inNode);
 void Node_Delete(struct Node* inNode);
 void Node_AddAfter(struct Node* s, struct Node *afterThisOne);
 void Node_AddBefore(struct Node* s, struct Node *beforeThisOne);
@@ -191,8 +193,8 @@ void Unit_ZeroOutputs(struct Unit *inUnit, int inNumSamples);
 void SendDone(struct ReplyAddress *inReply, const char *inCommandName);
 void SendDoneWithIntValue(struct ReplyAddress *inReply, const char *inCommandName, int value);
 void SendFailure(struct ReplyAddress *inReply, const char *inCommandName, const char *errString);
+void SendFailureWithIntValue(struct ReplyAddress *inReply, const char *inCommandName, const char *errString, uint32 index);
 void ReportLateness(struct ReplyAddress *inReply, float32 seconds);
-void DumpReplyAddress(struct ReplyAddress *inReplyAddress);
 int32 Hash(struct ReplyAddress *inReplyAddress);
 
 ////////////////////////////////////////////////////////////////////////

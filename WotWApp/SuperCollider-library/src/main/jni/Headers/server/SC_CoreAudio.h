@@ -27,7 +27,9 @@
 #include "OSC_Packet.h"
 #include "SC_SyncCondition.h"
 #include "PriorityQueue.h"
-#include "SC_Lock.h"
+#include <boost/optional.hpp>
+
+#include <SC_Lock.h>
 
 #define SC_AUDIO_API_COREAUDIO	1
 #define SC_AUDIO_API_JACK		2
@@ -35,14 +37,6 @@
 #define SC_AUDIO_API_AUDIOUNITS  4
 #define SC_AUDIO_API_COREAUDIOIPHONE	5
 #define SC_AUDIO_API_ANDROIDJNI 6
-
-#ifdef _WIN32
-# ifndef SC_INNERSC
-#  define SC_AUDIO_API SC_AUDIO_API_PORTAUDIO
-# else
-#  define SC_AUDIO_API SC_AUDIO_API_INNERSC_VST
-# endif
-#endif
 
 #ifdef SC_ANDROID
 #define SC_AUDIO_API SC_AUDIO_API_ANDROIDJNI
@@ -53,7 +47,13 @@
 #endif
 
 #ifndef SC_AUDIO_API
-# define SC_AUDIO_API SC_AUDIO_API_COREAUDIO
+# if defined(_WIN32)
+#  define SC_AUDIO_API SC_AUDIO_API_PORTAUDIO
+# elif defined(__APPLE__)
+#  define SC_AUDIO_API SC_AUDIO_API_COREAUDIO
+# else
+#  error SC_AUDIO_API undefined, cannot determine audio backend
+# endif
 #endif // SC_AUDIO_API
 
 #if SC_AUDIO_API == SC_AUDIO_API_COREAUDIO || SC_AUDIO_API == SC_AUDIO_API_AUDIOUNITS
@@ -69,39 +69,91 @@
 #endif
 
 
-#if SC_AUDIO_API == SC_AUDIO_API_PORTAUDIO
-#include "portaudio.h"
-#endif
-
-const double kSecondsToOSCunits = 4294967296.; // pow(2,32)
-const double kMicrosToOSCunits = 4294.967296; // pow(2,32)/1e6
-const double kNanosToOSCunits  = 4.294967296; // pow(2,32)/1e9
-
-const int32 kSECONDS_FROM_1900_to_1970 = (int32)2208988800UL; /* 17 leap years */
-const double kOSCtoSecs = 2.328306436538696e-10;
-
 struct SC_ScheduledEvent
 {
+	/// Callback function responsible for freeing the OSC packet in the correct thread.
+	typedef void (*PacketFreeFunc)(struct World* world, OSC_Packet* packet);
+
+	/// Frees an OSC packet in the realtime thread (to be used as a PacketFreeFunc).
+	static void FreeInRT(struct World* world, OSC_Packet* packet);
+	/// Frees an OSC packet in the non-realtime thread (to be used as a PacketFreeFunc).
+	static void FreeInNRT(struct World* world, OSC_Packet* packet);
+
 	SC_ScheduledEvent() : mTime(0), mPacket(0) {}
-	SC_ScheduledEvent(struct World *inWorld, int64 inTime, OSC_Packet *inPacket)
-		: mTime(inTime), mPacket(inPacket), mWorld(inWorld) {}
+	SC_ScheduledEvent(struct World *inWorld, int64 inTime, OSC_Packet *inPacket, PacketFreeFunc freeFunc)
+		: mTime(inTime), mPacket(inPacket), mPacketFreeFunc(freeFunc), mWorld(inWorld) {}
 
 	int64 Time() { return mTime; }
 	void Perform();
 
+	struct key_t
+	{
+		int64 time, stabilityCount;
+
+		bool operator<(key_t const & rhs) const
+		{
+			if (time < rhs.time)
+				return true;
+			if (time > rhs.time)
+				return false;
+			return stabilityCount < rhs.stabilityCount;
+		}
+
+		bool operator>(key_t const & rhs) const
+		{
+			if (time > rhs.time)
+				return true;
+			if (time < rhs.time)
+				return false;
+			return stabilityCount > rhs.stabilityCount;
+		}
+
+		bool operator==(key_t const & rhs) const
+		{
+			return (time == rhs.time) && (stabilityCount == rhs.stabilityCount);
+		}
+	};
+
+	key_t key() const
+	{
+		key_t ret;
+		ret.time = mTime;
+		ret.stabilityCount = mStabilityCount;
+		return ret;
+	}
+
 	int64 mTime;
+	int64 mStabilityCount;
 	OSC_Packet *mPacket;
+	PacketFreeFunc mPacketFreeFunc;
 	struct World *mWorld;
 };
 
-typedef MsgFifo<FifoMsg, 1024> EngineFifo;
+typedef MsgFifo<FifoMsg, 65536> EngineFifo;
 
 // Functions to be implemented by the driver backend
 extern "C" {
 	int32 server_timeseed();
 	int64 oscTimeNow();
 };
+
 void initializeScheduler();
+
+/** Denotes whether an OSC packet has been performed immediately or has been scheduled for later execution.
+
+	If the package has been scheduled, memory ownership is transferred from the caller to the scheduler.
+*/
+enum PacketStatus
+{
+	PacketPerformed,
+	PacketScheduled
+};
+
+/** Perform a completion message in the realtime thread.
+
+	The return value denotes whether ownership is transferred to the scheduler or not.
+ */
+PacketStatus PerformCompletionMsg(World *world, const OSC_Packet& packet);
 
 class SC_AudioDriver
 {
@@ -116,13 +168,14 @@ protected:
 	EngineFifo mFromEngine, mToEngine;
 	EngineFifo mOscPacketsToEngine;
 	SC_SyncCondition mAudioSync;
-	pthread_t mThread;
+	thread mThread;
 	bool mRunThreadFlag;
 	uint32 mSafetyOffset;
 	PriorityQueueT<SC_ScheduledEvent, 2048> mScheduler;
 	int mNumSamplesPerCallback;
 	uint32 mPreferredHardwareBufferFrameSize;
 	uint32 mPreferredSampleRate;
+	boost::optional<uint32> mExplicitSampleRate;
 	double mBuffersPerSecond;
 	double mAvgCPU, mPeakCPU;
 	int mPeakCounter, mMaxPeakCounter;
@@ -135,7 +188,7 @@ protected:
 	double mSmoothSampleRate;
 	double mSampleRate;
 
-    // Driver interface methods, implemented by subclasses
+	// Driver interface methods, implemented by subclasses
 	/**
 	* DriverSetup() should init the driver and write the num of samples per callback
 	* and the sample rate into the two addresses supplied as arguments.
@@ -159,7 +212,7 @@ public:
 	SC_AudioDriver(struct World *inWorld);
 	virtual ~SC_AudioDriver();
 
-    int64 mOSCbuftime;
+	int64 mOSCbuftime;
 
 	bool Setup();
 	bool Start();
@@ -168,7 +221,7 @@ public:
 	void ClearSched() { mScheduler.Empty(); }
 
 	void RunNonRealTime(float *in, float *out, int numSamples, int64 oscTime);
-	void* RunThread();
+	void RunThread();
 
 	int SafetyOffset() const { return mSafetyOffset; }
 	int NumSamplesPerCallback() const { return mNumSamplesPerCallback; }
@@ -201,7 +254,7 @@ extern SC_AudioDriver* SC_NewAudioDriver(struct World* inWorld);
 class SC_CoreAudioDriver : public SC_AudioDriver
 {
 
-    AudioBufferList * mInputBufList;
+	AudioBufferList * mInputBufList;
 	AudioDeviceID	mInputDevice;
 	AudioDeviceID	mOutputDevice;
 
@@ -229,10 +282,17 @@ protected:
 	virtual bool DriverStart();
 	virtual bool DriverStop();
 
+	AudioDeviceIOProcID mOutputID;
+	AudioDeviceIOProcID mInputID;
+
 public:
+	int builtinoutputflag_; 
+	
     SC_CoreAudioDriver(struct World *inWorld);
 	virtual ~SC_CoreAudioDriver();
 
+	bool StopStart(); 
+	
     void Run(const AudioBufferList* inInputData, AudioBufferList* outOutputData, int64 oscTime);
 
 	bool UseInput() { return mInputDevice != kAudioDeviceUnknown; }
@@ -282,77 +342,10 @@ public:
 
 inline SC_AudioDriver* SC_NewAudioDriver(struct World *inWorld)
 {
-    return new SC_iCoreAudioDriver(inWorld);
+	return new SC_iCoreAudioDriver(inWorld);
 }
 #endif // SC_AUDIO_API_COREAUDIOIPHONE
 
-
-#if SC_AUDIO_API == SC_AUDIO_API_PORTAUDIO
-class SC_PortAudioDriver : public SC_AudioDriver
-{
-
-    int mInputChannelCount, mOutputChannelCount;
-    PaStream *mStream;
-	PaTime mPaStreamStartupTime;
-	int64 mPaStreamStartupTimeOSC;
-
-protected:
-    // Driver interface methods
-	virtual bool DriverSetup(int* outNumSamplesPerCallback, double* outSampleRate);
-	virtual bool DriverStart();
-	virtual bool DriverStop();
-
-public:
-    SC_PortAudioDriver(struct World *inWorld);
-	virtual ~SC_PortAudioDriver();
-
-    int PortAudioCallback( const void *input, void *output,
-            unsigned long frameCount, const PaStreamCallbackTimeInfo* timeInfo,
-            PaStreamCallbackFlags statusFlags );
-private:
-	void GetPaDeviceFromName(const char* device, int* mInOut);
-};
-
-inline SC_AudioDriver* SC_NewAudioDriver(struct World *inWorld)
-{
-    return new SC_PortAudioDriver(inWorld);
-}
-#endif // SC_AUDIO_API_PORTAUDIO
-
-#if SC_AUDIO_API == SC_AUDIO_API_INNERSC_VST
-
-struct VstTimeInfo;
-
-class SC_VSTAudioDriver : public SC_AudioDriver
-{
-
-    int   mInputChannelCount, mOutputChannelCount;
-    bool  mIsStreaming;
-
-protected:
-    // Driver interface methods
-	virtual bool  DriverSetup(int* outNumSamplesPerCallback, double* outSampleRate);
-	virtual bool  DriverStart();
-	virtual bool  DriverStop();
-  void          Callback(
-                  const void *input, void *output,
-                  unsigned long frameCount, const VstTimeInfo* timeInfo );
-
-public:
-              SC_VSTAudioDriver(struct World *inWorld);
-  	virtual  ~SC_VSTAudioDriver();
-
-//    int PortAudioCallback( const void *input, void *output,
-//            unsigned long frameCount, const PaStreamCallbackTimeInfo* timeInfo,
-//            PaStreamCallbackFlags statusFlags );
-};
-
-inline SC_AudioDriver* SC_NewAudioDriver(struct World *inWorld)
-{
-  // This is called from "World* World_New(WorldOptions *inOptions)" in "SC_World.cpp"
-  return new SC_VSTAudioDriver(inWorld); //This gets saved in inWorld->hw->mAudioDriver
-}
-#endif // SC_AUDIO_API == SC_AUDIO_API_INNERSC_VST
 
 #if SC_AUDIO_API == SC_AUDIO_API_ANDROIDJNI
 

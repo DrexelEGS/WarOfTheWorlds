@@ -6,11 +6,11 @@ struct Logger : public Unit
 {
 	float m_prevtrig, m_prevreset;
 	unsigned int m_writepos;
-	
+
 	// Also the Buffer stuff used by BufWr
 	float m_fbufnum;
 	SndBuf *m_buf;
-	
+
 	bool m_maypost, m_notfull;
 };
 
@@ -19,7 +19,7 @@ struct ListTrig : public Unit
 	float m_prevreset;
 	unsigned int m_bufpos;
 	double m_timepos, m_timeincrement;
-	
+
 	float m_fbufnum;
 	SndBuf *m_buf;
 };
@@ -29,7 +29,7 @@ struct ListTrig2 : public Unit
 	float m_prevreset;
 	unsigned int m_bufpos;
 	double m_timepos, m_timeincrement;
-	
+
 	float m_fbufnum;
 	SndBuf *m_buf;
 };
@@ -37,10 +37,10 @@ struct ListTrig2 : public Unit
 struct GaussClass : public Unit
 {
 	int m_numdims, m_numclasses, m_numnumsperclass;
-	
-	float *m_indata; 
+
+	float *m_indata;
 	float *m_centred; // data after mean-removal
-	
+
 	float m_result, m_fbufnum;
 	SndBuf *m_buf;
 };
@@ -49,7 +49,7 @@ struct BufMax : public Unit
 {
 	float m_fbufnum;
 	SndBuf *m_buf;
-	
+
 	float m_bestval;
 	float m_bestpos;
 };
@@ -76,14 +76,12 @@ struct MIDelay : public Unit
 
 extern "C"
 {
-	void load(InterfaceTable *inTable);
-	
 	void Logger_Ctor(Logger* unit);
 	void Logger_next(Logger *unit, int inNumSamples);
-	
+
 	void ListTrig_Ctor(ListTrig* unit);
 	void ListTrig_next(ListTrig *unit, int inNumSamples);
-	
+
 	void ListTrig2_Ctor(ListTrig2* unit);
 	void ListTrig2_next(ListTrig2 *unit, int inNumSamples);
 
@@ -93,16 +91,16 @@ extern "C"
 
 	void BufMax_Ctor(BufMax* unit);
 	void BufMax_next(BufMax *unit, int inNumSamples);
-	
+
 	void BufMin_Ctor(BufMin* unit);
 	void BufMin_next(BufMin *unit, int inNumSamples);
-	
+
 	void ArrayMax_Ctor(ArrayMax* unit);
 	void ArrayMax_next(ArrayMax *unit, int inNumSamples);
-	
+
 	void ArrayMin_Ctor(ArrayMin* unit);
 	void ArrayMin_next(ArrayMin *unit, int inNumSamples);
-	
+
 	//void MIDelay_Ctor(MIDelay* unit);
 	//void MIDelay_next(MIDelay *unit, int inNumSamples);
 	//void MIDelay_Dtor(MIDelay* unit);
@@ -138,7 +136,7 @@ extern "C"
        uint32 bufSamples __attribute__((__unused__)) = buf->samples; \
        uint32 bufFrames = buf->frames; \
        int mask __attribute__((__unused__)) = buf->mask; \
-       int guardFrame __attribute__((__unused__)) = bufFrames - 2; 
+       int guardFrame __attribute__((__unused__)) = bufFrames - 2;
 
 #define CHECK_BUF \
 	if (!bufData) { \
@@ -155,23 +153,23 @@ extern "C"
 		return; \
 	} \
 	float *in[64]; \
-	for (uint32 i=0; i<numInputs; ++i) in[i] = ZIN(i+offset); 
+	for (uint32 i=0; i<numInputs; ++i) in[i] = ZIN(i+offset);
 
 //////////////////////////////////////////////////////////////////
 
 void Logger_Ctor(Logger* unit)
 {
 	SETCALC(Logger_next);
-	
+
 	// a la BufWr
 	unit->m_fbufnum = -1e9f;
-	
+
 	unit->m_prevtrig = 0.f;
 	unit->m_prevreset = 0.f;
 	unit->m_writepos = 0;
-	
+
 	unit->m_maypost = (unit->mWorld->mVerbosity >= 0);
-	
+
 	//Logger_next(unit, 1);
 	ClearUnitOutputs(unit, 1);
 }
@@ -180,25 +178,25 @@ void Logger_next(Logger *unit, int inNumSamples)
 {
 	float trig = ZIN0(1);
 	float reset = ZIN0(2);
-	
+
 	float prevtrig = unit->m_prevtrig;
 	float prevreset = unit->m_prevreset;
 	unsigned int writepos = unit->m_writepos; // The write position (takes account of num channels)
-	
+
 	// Stuff a la BufWr - NB I have modified GET_BUF slightly
 	GET_BUF_ALTERED
 	CHECK_BUF
 	SETUP_IN(3)
-	
+
 	float* table0 = bufData + writepos;
-	
+
 	// First, handle reset
 	if(justInitialised || (reset > 0.f && prevreset <= 0.f)){
 		writepos = 0;
 		unit->m_notfull = true;
 		memset(bufData, 0, bufChannels * bufFrames * sizeof(float));
 	}
-	
+
 	// Now check for trigger
 	if(unit->m_notfull && trig > 0.f && prevtrig <= 0.f){
 		if(writepos == bufChannels * bufFrames){
@@ -213,12 +211,12 @@ void Logger_next(Logger *unit, int inNumSamples)
 			writepos += numInputs;
 		}
 	}
-	
+
 	// Store state
 	unit->m_prevtrig = trig;
 	unit->m_prevreset = reset;
 	unit->m_writepos = writepos;
-	
+
 	ZOUT0(0) = unit->m_notfull ? 1.f : 0.f;
 }
 
@@ -227,16 +225,16 @@ void Logger_next(Logger *unit, int inNumSamples)
 void ListTrig_Ctor(ListTrig* unit)
 {
 	SETCALC(ListTrig_next);
-	
+
 	unit->m_fbufnum = -1e9f;
-	
+
 	unit->m_prevreset = 0.f;
 	unit->m_bufpos = 0;
 	unit->m_timepos = 0.0 - (double)ZIN0(2);
 	unit->m_timeincrement = (double)BUFDUR;
-	
+
 	//Print("ListTrig: time increment set to %g, i.e. freq of %g/s", unit->m_timeincrement, 1.0/unit->m_timeincrement);
-	
+
 	ClearUnitOutputs(unit, 1);
 }
 
@@ -244,30 +242,30 @@ void ListTrig_next(ListTrig *unit, int inNumSamples)
 {
 	float reset = ZIN0(1);
 	unsigned int numframes = (unsigned int)ZIN0(3);
-	
+
 	float prevreset = unit->m_prevreset;
 	unsigned int bufpos = unit->m_bufpos; // The readback position
 	double timepos = unit->m_timepos;
 	double timeinc = unit->m_timeincrement;
-	
+
 	float out = 0.f;
-	
+
 	// Stuff a la BufWr - NB I have modified GET_BUF slightly
 	GET_BUF
 	CHECK_BUF
-	
+
 	// First, handle reset
 	if(reset > 0.f && prevreset <= 0.f){
 		bufpos = 0;
 		timepos = 0.0 - (double)ZIN0(2);
 	}
-	
+
 	if(bufpos<numframes){
 		float* table0 = bufData + bufpos;
-		
+
 		if(table0[0] <= (float)timepos){
 			out = 1.f;
-			
+
 			// Also increment buffer read position until we're either at the end of the buffer, or we've found a "future" value
 			while((bufpos<numframes) && (table0[0] <= (float)timepos)){
 				bufpos++;
@@ -275,12 +273,12 @@ void ListTrig_next(ListTrig *unit, int inNumSamples)
 			}
 		}
 	}
-	
+
 	// Store state
 	unit->m_prevreset = reset;
 	unit->m_bufpos = bufpos;
 	unit->m_timepos = timepos + timeinc; // Shift time on to what it will be on the next go
-	
+
 	ZOUT0(0) = out;
 }
 
@@ -293,16 +291,16 @@ Does the same as ListTrig but instead of absolute times the buffer contains inte
 void ListTrig2_Ctor(ListTrig2* unit)
 {
 	SETCALC(ListTrig2_next);
-	
+
 	unit->m_fbufnum = -1e9f;
-	
+
 	unit->m_prevreset = 0.f;
 	unit->m_bufpos = 0;
 	unit->m_timepos = 0.0;
 	unit->m_timeincrement = (double)BUFDUR;
-	
+
 	//Print("ListTrig: time increment set to %g, i.e. freq of %g/s", unit->m_timeincrement, 1.0/unit->m_timeincrement);
-	
+
 	ClearUnitOutputs(unit, 1);
 }
 
@@ -310,27 +308,27 @@ void ListTrig2_next(ListTrig2 *unit, int inNumSamples)
 {
 	float reset = ZIN0(1);
 	unsigned int numframes = (unsigned int)ZIN0(2);
-	
+
 	float prevreset = unit->m_prevreset;
 	unsigned int bufpos = unit->m_bufpos; // The readback position
 	double timepos = unit->m_timepos;
 	double timeinc = unit->m_timeincrement;
-	
+
 	float out = 0.f;
-	
+
 	// Stuff a la BufWr - NB I have modified GET_BUF slightly
 	GET_BUF
 	CHECK_BUF
-	
+
 	// First, handle reset
 	if(reset > 0.f && prevreset <= 0.f){
 		bufpos = 0;
 		timepos = 0.0;
 	}
-	
+
 	if(bufpos<numframes){
 		float* table0 = bufData + bufpos;
-		
+
 		if(table0[0] <= (float)timepos){
 			out = 1.f;
 			// reset timepos to zero
@@ -341,12 +339,12 @@ void ListTrig2_next(ListTrig2 *unit, int inNumSamples)
 			}
 		}
 	}
-	
+
 	// Store state
 	unit->m_prevreset = reset;
 	unit->m_bufpos = bufpos;
 	unit->m_timepos = timepos + timeinc; // Shift time on to what it will be on the next go
-	
+
 	ZOUT0(0) = out;
 }
 
@@ -355,19 +353,19 @@ void ListTrig2_next(ListTrig2 *unit, int inNumSamples)
 void GaussClass_Ctor(GaussClass* unit)
 {
 	SETCALC(GaussClass_next);
-	
+
 	// The dimensionality is specified by the dimensionality of inputs, appended to params
 	int numdims = unit->mNumInputs - 2;
 	unit->m_numdims = numdims;
 	unit->m_numclasses = 0; // This will be filled in when the buffer first arrives
 	unit->m_numnumsperclass = numdims*numdims + numdims + 1;
-	
+
 	unit->m_indata  = (float*)RTAlloc(unit->mWorld, numdims * sizeof(float));
 	unit->m_centred = (float*)RTAlloc(unit->mWorld, numdims * sizeof(float));
-	
+
 	unit->m_result = 0.f;
 	unit->m_fbufnum = -1e9f;
-	
+
 	ClearUnitOutputs(unit, 1);
 }
 
@@ -388,10 +386,10 @@ inline double GaussClass_exponent(const int numdims, const float *centred, const
 void GaussClass_next(GaussClass *unit, int inNumSamples)
 {
 	if(ZIN0(1)>0.f){ // If gate>0
-		
+
 		int numdims = unit->m_numdims;
 		int numnumsperclass  = unit->m_numnumsperclass;
-		
+
 		// Do the GET_BUF-like bit
 		float fbufnum  = ZIN0(0);
 		if (fbufnum != unit->m_fbufnum) {
@@ -401,7 +399,7 @@ void GaussClass_next(GaussClass *unit, int inNumSamples)
 			unit->m_fbufnum = fbufnum;
 			unit->m_buf = world->mSndBufs + bufnum;
 			uint32 bufFrames = unit->m_buf->frames;
-			
+
 			if(unit->m_buf->channels != 1 && world->mVerbosity > -1){
 				Print("GaussClass: warning, Buffer should be single-channel\n");
 			}
@@ -410,23 +408,23 @@ void GaussClass_next(GaussClass *unit, int inNumSamples)
 		}
 		SndBuf *buf = unit->m_buf;
 		float *bufData = buf->data;
-		
+
 		CHECK_BUF
-		
+
 		int numclasses  = unit->m_numclasses;
 		float *indata   = unit->m_indata;
 		float *centred  = unit->m_centred;
-		
+
 		// Grab  the input data
 		for(int i=0; i<numdims; ++i){
 			indata[i] = ZIN0(i + 2);
 		}
-				
+
 		// Locations of the (first) class's data, these will be incremented
 		float *mean                 = bufData;
 		float *invcov               = bufData + numdims;
 		float *weightoversqrtdetcov = bufData + numnumsperclass - 1;
-		
+
 		// Iterate the classes, calculating the score
 		int winningclass=0;
 		double winningclassscore=0.;
@@ -436,7 +434,7 @@ void GaussClass_next(GaussClass *unit, int inNumSamples)
 			for(int j=0; j<numdims; ++j){
 				centred[j] = indata[j] - mean[j];
 			}
-			
+
 			// Now calculate the score, see if we've won
 			curscore = (*weightoversqrtdetcov)
 					* exp(GaussClass_exponent(numdims, centred, invcov));
@@ -444,18 +442,18 @@ void GaussClass_next(GaussClass *unit, int inNumSamples)
 				winningclassscore = curscore;
 				winningclass      = i;
 			}
-			
+
 			// Increment pointers for the next class
 			mean                 += numnumsperclass;
 			invcov               += numnumsperclass;
 			weightoversqrtdetcov += numnumsperclass;
 		}
-		
+
 		// Store the winner
 		unit->m_result = (float)winningclass;
-		
+
 	} // end gate check
-	
+
 	ZOUT0(0) = unit->m_result;
 }
 void GaussClass_Dtor(GaussClass* unit)
@@ -478,15 +476,15 @@ void BufMax_Ctor(BufMax* unit)
 void BufMax_next(BufMax *unit, int inNumSamples)
 {
 	bool gate = ZIN0(1) > 0.f;
-	
+
 	GET_BUF
 	CHECK_BUF
-	
+
 //	Print("BufMax: fbufnum %g, gate %i\n", fbufnum, gate);
-	
+
 	float bestval = unit->m_bestval;
 	uint32 bestpos = unit->m_bestpos;
-	
+
 	if(gate){
 		bestval = -INFINITY;
 		bestpos = 0;
@@ -500,7 +498,7 @@ void BufMax_next(BufMax *unit, int inNumSamples)
 		unit->m_bestval = bestval;
 		unit->m_bestpos = bestpos;
 	}
-	
+
 	ZOUT0(0) = bestval;
 	ZOUT0(1) = bestpos;
 }
@@ -519,13 +517,13 @@ void BufMin_Ctor(BufMin* unit)
 void BufMin_next(BufMin *unit, int inNumSamples)
 {
 	bool gate = ZIN0(1) > 0.f;
-	
+
 	GET_BUF
 	CHECK_BUF
-	
+
 	float bestval = unit->m_bestval;
 	uint32 bestpos = unit->m_bestpos;
-	
+
 	if(gate){
 		bestval = INFINITY;
 		bestpos = 0;
@@ -539,7 +537,7 @@ void BufMin_next(BufMin *unit, int inNumSamples)
 		unit->m_bestval = bestval;
 		unit->m_bestpos = bestpos;
 	}
-	
+
 	ZOUT0(0) = bestval;
 	ZOUT0(1) = bestpos;
 }
@@ -557,7 +555,7 @@ void ArrayMax_next(ArrayMax *unit, int inNumSamples)
 	float *out0 = ZOUT(0);
 	float *out1 = ZOUT(1);
 	uint16 numInputs = unit->mNumInputs;
-	
+
 	float val, bestval;
 	uint16 bestpos;
 	for(int j=0; j<inNumSamples; ++j){
@@ -588,7 +586,7 @@ void ArrayMin_next(ArrayMin *unit, int inNumSamples)
 	float *out0 = ZOUT(0);
 	float *out1 = ZOUT(1);
 	uint16 numInputs = unit->mNumInputs;
-	
+
 	float val, bestval;
 	uint16 bestpos;
 	for(int j=0; j<inNumSamples; ++j){
@@ -628,14 +626,14 @@ void MIDelay_Ctor(MIDelay* unit)
 	// and for the cutoffs
 	unit->m_cutoffs1  = (float*)RTAlloc(unit->mWorld, MIDelay_numbins * sizeof(float));
 	unit->m_cutoffs2  = (float*)RTAlloc(unit->mWorld, MIDelay_numbins * sizeof(float));
-	
+
 	ClearUnitOutputs(unit, 1);
 }
 
 void MIDelay_next(MIDelay *unit, int inNumSamples)
 {
 	bool gate = ZIN0(3) > 0.f;
-	
+
 	// Add new samples to the storage buffers
 	// (NB here we assume the buffers are at least large enough to hold inNumSamples)
 	float* in1 = unit->m_in1;
@@ -647,7 +645,7 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 	memmove(in2, in2 + inNumSamples, (inbufsize - inNumSamples) * sizeof(float));
 	Copy(inNumSamples, in1 + (inbufsize - inNumSamples), IN(0));
 	Copy(inNumSamples, in2 + (inbufsize - inNumSamples), IN(1));
-	
+
 	if(gate){
 		// Iterate over the two buffers to find min and max
 		float min1 = INFINITY, min2 = INFINITY, max1 = -INFINITY, max2=-INFINITY;
@@ -658,11 +656,11 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 			if(max2 < in2[i]) max2 = in2[i];
 		}
 //		Print("min1 %g max1 %g min2 %g max2 %g\n", min1, max1, min2, max2);
-		
+
 		if(min1==max1){
 		}else if(min2==max2){
 		}else{
-			
+
 			// Establish the lists of boundaries
 			float* cutoffs1 = unit->m_cutoffs1;
 			float* cutoffs2 = unit->m_cutoffs2;
@@ -672,7 +670,7 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 //				Print("cutoffs1[%i] = %g, cutoffs2[%i] = %g\n", i, cutoffs1[i], i, cutoffs2[i]);
 			}
 //			Print("Expected total: %u\n", inbufsize);
-			
+
 			uint32* xbins  = unit->m_xbins;
 			uint32* ybins  = unit->m_ybins;
 			// First zero the 1D bins
@@ -686,7 +684,7 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 				++xbins[x];
 				++ybins[y];
 			}
-			
+
 			uint32* xybins = unit->m_xybins;
 			int mindly = unit->m_mindly, maxdly = unit->m_maxdly;
 			double bestmi=-INFINITY;
@@ -696,7 +694,7 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 				// Zero the 2D bins
 				memset(xybins, 0, MIDelay_numbins * MIDelay_numbins);
 //		Print("xybins[0][0]: %u\n", *xybins);
-				
+
 				// Get pointers to the buffers, shunted so as to represent the time shift
 				float *in1win, *in2win;
 				size_t winsize;
@@ -709,7 +707,7 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 					in2win = in2 + delta;
 					winsize = inbufsize - delta;
 				}
-				
+
 				// Iterate along a suitable region of the buffers, incrementing the 2D bins
 				uint32 x, y;
 				for(size_t i=0; i<winsize; ++i){
@@ -723,7 +721,7 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 					// note, x-val (chan 1) is the big leap
 					++xybins[x * MIDelay_numbins + y];
 				}
-				
+
 				// Iterate the 2D bins, calculating the MI value
 				double mi = 0.;
 				for(size_t x=0; x < MIDelay_numbins; ++x){
@@ -737,9 +735,9 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 						//	double logthing = winsize * xybins[x * MIDelay_numbins + y] / (xbins[x] * ybins[y]);
 						//	mi += (xybins[x * MIDelay_numbins + y] / winsize)
 						//		* log(logthing);
-							
-							double logthing = inbufsize * (double)inbufsize * (double)xybins[x * MIDelay_numbins + y] 
-										/ 
+
+							double logthing = inbufsize * (double)inbufsize * (double)xybins[x * MIDelay_numbins + y]
+										/
 									(xbins[x] * ybins[y] * (double)winsize);
 							mi += ((double)xybins[x * MIDelay_numbins + y] / (double)winsize)
 								* log(logthing);
@@ -759,7 +757,7 @@ void MIDelay_next(MIDelay *unit, int inNumSamples)
 			Print("Best MI was %g at offset %i (offset range was [%i, %i])\n", bestmi, bestdelta, mindly, maxdly);
 			//unit->m_bestval = bestmi;
 			unit->m_bestpos = bestdelta / SAMPLERATE;
-			
+
 		} // end check for nonzero range
 	}
 	ZOUT0(0) = unit->m_bestpos;
@@ -781,7 +779,7 @@ void MIDelay_Dtor(MIDelay* unit)
 
 //////////////////////////////////////////////////////////////////
 
-void load(InterfaceTable *inTable)
+PluginLoad(MCLDBuffer)
 {
 	ft = inTable;
 

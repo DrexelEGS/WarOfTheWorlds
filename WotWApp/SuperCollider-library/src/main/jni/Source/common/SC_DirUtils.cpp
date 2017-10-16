@@ -22,10 +22,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdexcept>
+
+#ifdef __APPLE__
+#import <Foundation/Foundation.h>
+#endif
 
 #ifdef _WIN32
-# include <direct.h>
 # include "SC_Win32Utils.h"
+# include <windows.h>
+# include <direct.h>
+# include <shlobj.h>
 #else
 # include <unistd.h>
 # include <dirent.h>
@@ -35,9 +42,7 @@
 # include <sys/types.h>
 #endif
 
-#include <stdexcept>
 #include "SC_DirUtils.h"
-
 #if defined(__APPLE__) || defined(SC_IPHONE)
 #ifndef _SC_StandAloneInfo_
 # include "SC_StandAloneInfo_Darwin.h"
@@ -49,26 +54,28 @@
 #endif
 #endif
 
-// If you have libcurl, you may activate this flag and it will allow Buffer.read to read from remote URLs
-#ifdef HAVE_LIBCURL
-#include <curl/curl.h>
-#endif
-
-char *gIdeName="none";
+const char * gIdeName = "none";
 
 // Add a component to a path.
 
-void sc_AppendToPath(char *path, const char *component)
+void sc_AppendToPath(char *path, size_t max_size, const char *component)
 {
-#if defined(_WIN32)
-	strncat(path, "\\", PATH_MAX);
-#else
-	strncat(path, "/", PATH_MAX);
-#endif
-	strncat(path, component, PATH_MAX);
+	size_t currentLength = strlen(path);
+	if (currentLength >= max_size-1)
+		return;
+	path[currentLength] = SC_PATH_DELIMITER[0];
+	path[currentLength+1] = 0;
+	++currentLength;
+
+	char * tail = path + currentLength;
+	size_t remain = max_size - currentLength;
+
+	strncat(tail, component, remain);
 }
 
-char *sc_StandardizePath(const char *path, char *newpath2) {
+
+char *sc_StandardizePath(const char *path, char *newpath2)
+{
 	char newpath1[MAXPATHLEN];
 
 	newpath1[0] = '\0';
@@ -77,10 +84,10 @@ char *sc_StandardizePath(const char *path, char *newpath2) {
 	size_t pathLen = strlen(path);
 
 	if ((pathLen >= 2) && (path[0] == '~') && ((path[1] == '/') || (path[1] == '\\'))) {
-      char home[PATH_MAX];
-      sc_GetUserHomeDirectory(home, PATH_MAX);
+		char home[PATH_MAX];
+		sc_GetUserHomeDirectory(home, PATH_MAX);
 
-	    if (home != 0) {
+		if (home[0] != 0) {
 			if ((pathLen - 1 + strlen(home)) >= MAXPATHLEN) {
 				return 0;
 			}
@@ -101,7 +108,9 @@ char *sc_StandardizePath(const char *path, char *newpath2) {
 	}
 
 	bool isAlias = false;
-	sc_ResolveIfAlias(newpath1, newpath2, isAlias, PATH_MAX);
+	if(sc_ResolveIfAlias(newpath1, newpath2, isAlias, PATH_MAX)!=0) {
+		strcpy(newpath2, newpath1);
+	}
 
 	return newpath2;
 }
@@ -129,6 +138,7 @@ bool sc_IsSymlink(const char* path)
 	return false;
 #else
 	struct stat buf;
+
 	return ((stat(path, &buf) == 0) &&
 			S_ISLNK(buf.st_mode));
 #endif
@@ -142,7 +152,7 @@ bool sc_IsNonHostPlatformDir(const char *name)
 	const char a[] = "linux", b[] = "windows", c[]="iphone";
 #elif defined(__linux__)
 	const char a[] = "osx", b[] = "windows", c[]="iphone";
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	const char a[] = "osx", b[] = "windows", c[]="iphone";
 #elif defined(_WIN32)
 	const char a[] = "osx", b[] = "linux", c[]="iphone";
@@ -164,8 +174,8 @@ inline static bool sc_IsSpecialDirectory(const char* name)
 
 bool sc_SkipDirectory(const char *name)
 {
-	return ((strcasecmp(name, "help") == 0) ||
-			(strcasecmp(name, "ignore") == 0) ||
+	return (stringCaseCompare(name, "help")   ||
+			stringCaseCompare(name, "ignore") ||
 			(strcmp(name, ".svn") == 0) ||
 			(strcmp(name, ".git") == 0) ||
 			(strcmp(name, "_darcs") == 0) ||
@@ -174,44 +184,48 @@ bool sc_SkipDirectory(const char *name)
 }
 
 
-void sc_ResolveIfAlias(const char *path, char *returnPath, bool &isAlias, int length)
+int sc_ResolveIfAlias(const char *path, char *returnPath, bool &isAlias, int length)
 {
 	isAlias = false;
-#ifdef __APPLE__
-	FSRef dirRef;
-	OSStatus osStatusErr = FSPathMakeRef ((const UInt8 *) path, &dirRef, NULL);
-	if ( !osStatusErr ) {
-		Boolean isFolder;
-		Boolean wasAliased;
-		OSErr err = FSResolveAliasFile (&dirRef, true, &isFolder, &wasAliased);
-		isAlias = wasAliased;
-		if ( !err && wasAliased ) {
-			UInt8 resolvedPath[PATH_MAX];
-			osStatusErr = FSRefMakePath (&dirRef, resolvedPath, length);
-			if ( !osStatusErr ) {
-				strncpy(returnPath, (char *) resolvedPath, length);
-				return;
+#if defined(__APPLE__) && !defined(SC_IPHONE)
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+	NSString *nsstringPath = [NSString stringWithCString: path encoding: NSUTF8StringEncoding];
+	BOOL isDirectory;
+	// does the file exist? If not just copy and bail
+	if([[NSFileManager defaultManager] fileExistsAtPath: nsstringPath isDirectory: &isDirectory]) {
+		NSError *error;
+
+		NSData *bookmark = [NSURL bookmarkDataWithContentsOfURL: [NSURL fileURLWithPath:nsstringPath isDirectory: isDirectory] error: &error];
+
+		// is it an alias? If not just copy and bail
+		if(bookmark) {
+			NSError *resolvedURLError;
+			BOOL isStale;
+			NSURL *resolvedURL = [NSURL URLByResolvingBookmarkData: bookmark options: NSURLBookmarkResolutionWithoutUI relativeToURL: nil bookmarkDataIsStale: &isStale error: &resolvedURLError];
+			// does it actually lead to something?
+			if(isStale || (resolvedURL == NULL) ) {
+				printf("Error: Target missing for alias at %s\n", path);
+				return -1;
 			}
+
+			NSString *resolvedString = [resolvedURL path];
+
+			const char *resolvedPath = [resolvedString cStringUsingEncoding: NSUTF8StringEncoding];
+			isAlias = true;
+			strncpy(returnPath, resolvedPath, length);
+			return 0;
 		}
 	}
-#elif defined(__linux__)
-	isAlias = sc_IsSymlink(path);
-	if (!realpath(path, returnPath))
-		strcpy(returnPath, path);
-	return;
-#elif defined(__FreeBSD__)
-	isAlias = sc_IsSymlink(path);
-	if (!realpath(path, returnPath))
-		strcpy(returnPath, path);
-	return;
+    [pool release];
+
 #endif
 	strcpy(returnPath, path);
-	return;
+	return 0;
 }
 
 // Support for Bundles
 
-#if defined(__APPLE__)	// running on OS X
+#if defined(__APPLE__) && !defined(SC_IPHONE)	// running on OS X
 
 // Support for stand-alone applications
 
@@ -223,6 +237,26 @@ bool sc_IsStandAlone()
 void sc_GetResourceDirectory(char* pathBuf, int length)
 {
 	SC_StandAloneInfo::GetResourceDir(pathBuf, length);
+}
+
+
+void sc_AppendBundleName(char *str, int size)
+{
+	CFBundleRef mainBundle;
+	mainBundle = CFBundleGetMainBundle();
+	if(mainBundle){
+		CFDictionaryRef dictRef = CFBundleGetInfoDictionary(mainBundle);
+		CFStringRef strRef;
+		strRef = (CFStringRef)CFDictionaryGetValue(dictRef, CFSTR("CFBundleName"));
+		if(strRef){
+			const char *bundleName = CFStringGetCStringPtr(strRef, CFStringGetSystemEncoding());
+			if(bundleName) {
+				sc_AppendToPath(str, size, bundleName);
+				return;
+			}
+		}
+	}
+	sc_AppendToPath(str, size, "SuperCollider");
 }
 
 #elif defined(SC_IPHONE)
@@ -237,7 +271,7 @@ void sc_GetResourceDirectory(char* pathBuf, int length)
 	sc_GetUserAppSupportDirectory(pathBuf, length);
 }
 
-#else
+#elif defined(__unix__)
 
 bool sc_IsStandAlone()
 {
@@ -246,17 +280,49 @@ bool sc_IsStandAlone()
 
 void sc_GetResourceDirectory(char* pathBuf, int length)
 {
-	sc_GetResourceDirectoryFromAppDirectory(pathBuf, length);
+#ifdef SC_DATA_DIR
+	strncpy(pathBuf, SC_DATA_DIR, length);
+#else
+	strncpy(pathBuf, "/usr/share/SuperCollider", length);
+#endif
 }
 
+#elif defined(_WIN32)
+
+bool sc_IsStandAlone()
+{
+	return false;
+}
+
+void sc_GetResourceDirectory(char* dest, int length)
+{
+	char buf[PATH_MAX];
+	GetModuleFileName( NULL, buf, length );
+	char *path = win32_dirname(buf);
+	strcpy(dest, path);
+}
+
+#else
+
+bool sc_IsStandAlone()
+{
+	return false;
+}
+
+static void sc_GetResourceDirectoryFromAppDirectory(char* pathBuf, int length)
+{
+	char * result = getcwd(pathBuf, length);
+	if (result != pathBuf)
+		throw std::runtime_error("cannot get current working directory");
+}
+
+
+void sc_GetResourceDirectory(char* pathBuf, int length)
+{
+	return sc_GetResourceDirectoryFromAppDirectory(pathBuf, length);
+}
 
 #endif
-
-void sc_GetResourceDirectoryFromAppDirectory(char* pathBuf, int length)
-{
-	getcwd(pathBuf, length);
-}
-
 
 // Support for Extensions
 
@@ -265,7 +331,7 @@ void sc_GetResourceDirectoryFromAppDirectory(char* pathBuf, int length)
 void sc_GetUserHomeDirectory(char *str, int size)
 {
 #ifndef _WIN32
-	char *home = getenv("HOME");
+	const char *home = getenv("HOME");
 	if(home!=NULL){
 		strncpy(str, home, size);
 	}else{
@@ -273,7 +339,7 @@ void sc_GetUserHomeDirectory(char *str, int size)
 		strcpy(str, "./");
 	}
 #else
-	win32_GetHomeFolder(str,size);
+	win32_GetKnownFolderPath(CSIDL_PROFILE, str, size);
 #endif
 }
 
@@ -282,19 +348,29 @@ void sc_GetUserHomeDirectory(char *str, int size)
 
 void sc_GetSystemAppSupportDirectory(char *str, int size)
 {
+#ifdef _WIN32
+	win32_GetKnownFolderPath(CSIDL_COMMON_APPDATA, str, size);
+	sc_AppendToPath(str, size, "SuperCollider");
+#else
+
 	strncpy(str,
 #if defined(SC_DATA_DIR)
 			SC_DATA_DIR,
-#elif SC_IPHONE
+#elif defined(SC_IPHONE)
 			"/",
 #elif defined(__APPLE__)
-			"/Library/Application Support/SuperCollider",
-#elif defined(_WIN32)
-			( getenv("SC_SYSAPPSUP_PATH")==NULL ) ? "C:\\SuperCollider" : getenv("SC_SYSAPPSUP_PATH"),
+			"/Library/Application Support",
 #else
 			"/usr/local/share/SuperCollider",
 #endif
 			size);
+
+#if defined(__APPLE__)
+	// Get the main bundle name for the app from the enclosed Info.plist 
+	sc_AppendBundleName(str, size);
+#endif
+
+#endif
 }
 
 
@@ -302,21 +378,32 @@ void sc_GetSystemAppSupportDirectory(char *str, int size)
 
 void sc_GetUserAppSupportDirectory(char *str, int size)
 {
-	char home[PATH_MAX];
-	sc_GetUserHomeDirectory(home, PATH_MAX);
+	// XDG support according to http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
+	const char * xdg_data_home = getenv("XDG_DATA_HOME");
+	if (xdg_data_home) {
+		strncpy(str, xdg_data_home, size);
+		sc_AppendToPath(str, size, "SuperCollider");
+		return;
+	}
 
-	snprintf(str,
-			 size,
-#if SC_IPHONE
-			"%s/Documents",
-#elif defined(__APPLE__)
-			 "%s/Library/Application Support/SuperCollider",
-#elif defined(_WIN32)
-			"%s\\SuperCollider",
+#if defined(_WIN32)
+	win32_GetKnownFolderPath(CSIDL_LOCAL_APPDATA, str, size);
+	sc_AppendToPath(str, size, "SuperCollider");
 #else
-			 "%s/share/SuperCollider",
+
+	sc_GetUserHomeDirectory(str, size);
+
+#if defined(SC_IPHONE)
+	sc_AppendToPath(str, size, "Documents");
+#elif defined(__APPLE__)
+	// Get the main bundle name for the app
+	sc_AppendToPath(str, size, "Library/Application Support");
+	sc_AppendBundleName(str, size);
+#else
+	sc_AppendToPath(str, size, ".local/share/SuperCollider");
 #endif
-			 home);
+
+#endif
 }
 
 
@@ -324,10 +411,8 @@ void sc_GetUserAppSupportDirectory(char *str, int size)
 
 void sc_GetSystemExtensionDirectory(char *str, int size)
 {
-	char path[PATH_MAX];
-	sc_GetSystemAppSupportDirectory(path, sizeof(path));
-	sc_AppendToPath(path, "Extensions");
-	strncpy(str, path, size);
+	sc_GetSystemAppSupportDirectory(str, size);
+	sc_AppendToPath(str, size, "Extensions");
 }
 
 
@@ -335,10 +420,27 @@ void sc_GetSystemExtensionDirectory(char *str, int size)
 
 void sc_GetUserExtensionDirectory(char *str, int size)
 {
-	char path[PATH_MAX];
-	sc_GetUserAppSupportDirectory(path, sizeof(path));
-	sc_AppendToPath(path, "Extensions");
-	strncpy(str, path, size);
+	sc_GetUserAppSupportDirectory(str, size);
+	sc_AppendToPath(str, size, "Extensions");
+}
+
+// Get the directory for the configuration files.
+void sc_GetUserConfigDirectory(char *str, int size)
+{
+	// XDG support according to http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
+	const char * xdg_config_home = getenv("XDG_CONFIG_HOME");
+	if (xdg_config_home) {
+		strncpy(str, xdg_config_home, size);
+		sc_AppendToPath(str, size, "SuperCollider");
+		return;
+	}
+
+#if defined(__linux__) || defined(__freebsd__)
+	sc_GetUserHomeDirectory(str, size);
+	sc_AppendToPath(str, size, ".config/SuperCollider");
+#else
+	sc_GetUserAppSupportDirectory(str, size);
+#endif
 }
 
 
@@ -413,7 +515,7 @@ bool sc_ReadDir(SC_DirHandle* dir, const char* dirname, char* path, bool& skipEn
 
     char entrypathname[PATH_MAX];
 	strncpy(entrypathname, dirname, PATH_MAX);
-	sc_AppendToPath(entrypathname, dir->mEntry.cFileName);
+	sc_AppendToPath(entrypathname, PATH_MAX, dir->mEntry.cFileName);
 
 	bool isAlias = false;
 	sc_ResolveIfAlias(entrypathname, path, isAlias, PATH_MAX);
@@ -443,11 +545,14 @@ bool sc_ReadDir(SC_DirHandle* dir, const char* dirname, char* path, bool& skipEn
 	// construct path from dir entry
 	char entrypathname[PATH_MAX];
 	strncpy(entrypathname, dirname, PATH_MAX);
-	sc_AppendToPath(entrypathname, dir->mEntry->d_name);
+	sc_AppendToPath(entrypathname, PATH_MAX, dir->mEntry->d_name);
 
 	// resolve path
 	bool isAlias = false;
-	sc_ResolveIfAlias(entrypathname, path, isAlias, PATH_MAX);
+	if (sc_ResolveIfAlias(entrypathname, path, isAlias, strlen(entrypathname))<0)
+	{
+		skipEntry = true;
+	}
 
 	return true;
 #endif
@@ -524,7 +629,7 @@ const char* sc_GlobNext(SC_GlobHandle* glob)
 	if (glob->mAtEnd)
 		return 0;
 	strncpy(glob->mEntryPath, glob->mFolder, PATH_MAX);
-	sc_AppendToPath(glob->mEntryPath, glob->mEntry.cFileName);
+	sc_AppendToPath(glob->mEntryPath, PATH_MAX, glob->mEntry.cFileName);
 	if (!::FindNextFile(glob->mHandle, &glob->mEntry))
 		glob->mAtEnd = true;
 	return glob->mEntryPath;
@@ -534,53 +639,3 @@ const char* sc_GlobNext(SC_GlobHandle* glob)
 	return glob->mHandle.gl_pathv[glob->mEntry++];
 #endif
 }
-
-// Wrapper function - if it seems to be a URL, dnld to local tmp file first.
-// If HAVE_LIBCURL is not set, this does absolutely nothing but call fopen.
-#ifdef HAVE_LIBCURL
-bool downloadToFp(FILE* fp, const char* mFilename){
-	bool success = true;
-	CURL* curl = curl_easy_init();
-	CURLcode ret;
-	char* errstr = (char*)malloc(CURL_ERROR_SIZE);
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errstr);
-	if((ret = curl_easy_setopt(curl, CURLOPT_URL, mFilename)) != 0){
-		scprintf("CURL setopt error while setting URL. Error code %i\n%s\n", ret, errstr);
-		success = false;
-	}
-	if((ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp)) != 0){
-		scprintf("CURL setopt error while setting temp file pointer. Error code %i\n%s\n", ret, errstr);
-		success = false;
-	}
-	//printf("Loading remote file %s...\n", mFilename);
-	if((ret = curl_easy_perform(curl)) != 0){
-		scprintf("CURL perform error while attempting to access remote file. Error code %i\n%s\n", ret, errstr);
-		success = false;
-	//}else{
-	//	printf("...done.\n");
-	}
-	curl_easy_cleanup(curl);
-	rewind(fp);
-	free(errstr);
-	return success;
-}
-FILE* fopenLocalOrRemote(const char* mFilename, const char* mode){
-	FILE* fp;
-	bool isRemote = strstr(mFilename, "://") != 0;
-	if(isRemote){
-		fp = tmpfile();
-		downloadToFp(fp, mFilename);
-	}else{
-		fp = fopen(mFilename, mode);
-	}
-	return fp;
-}
-#else
-// Non-curl version, so no checks for downloading etc:
-bool downloadToFp(FILE* fp, const char* mFilename){
-	return false;
-}
-FILE* fopenLocalOrRemote(const char* mFilename, const char* mode){
-	return fopen(mFilename, mode);
-}
-#endif

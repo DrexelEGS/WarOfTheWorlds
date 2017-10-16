@@ -26,16 +26,14 @@ struct MedianTriggered : public StatsTriggeredUnit
 	float m_outval;
 };
 
-// declare unit generator functions 
+// declare unit generator functions
 extern "C"
 {
-	void load(InterfaceTable *inTable);
-	
 	void MeanTriggered_Ctor(MeanTriggered* unit);
 	void MeanTriggered_next_xa(MeanTriggered *unit, int inNumSamples);
 	void MeanTriggered_next_xk(MeanTriggered *unit, int inNumSamples);
 	void MeanTriggered_Dtor(MeanTriggered* unit);
-	
+
 	void MedianTriggered_Ctor(MedianTriggered* unit);
 	void MedianTriggered_next_xa(MedianTriggered *unit, int inNumSamples);
 	void MedianTriggered_next_xk(MedianTriggered *unit, int inNumSamples);
@@ -52,7 +50,7 @@ void MeanTriggered_Ctor(MeanTriggered* unit)
 	}else{
 		SETCALC(MeanTriggered_next_xk);
 	}
-	
+
 	int length = (int)ZIN0(2); // Fixed number of items to average over
 
 	unit->m_circbuf = (float*)RTAlloc(unit->mWorld, length * sizeof(float));
@@ -62,7 +60,7 @@ void MeanTriggered_Ctor(MeanTriggered* unit)
 	unit->m_circbufpos = 0;
 	unit->m_length = length;
 	unit->m_mean = 0.f;
-	
+
 	// prime the pumps
 	MeanTriggered_next_xk(unit, 1);
 }
@@ -78,11 +76,11 @@ void MeanTriggered_next_xa(MeanTriggered* unit, int inNumSamples)
 	float* circbuf = unit->m_circbuf;
 	int circbufpos = unit->m_circbufpos;
 	int length = unit->m_length;
-	
+
 	// This may or may not be recalculated as we go through the loop, depending on triggering
 	float mean = unit->m_mean;
 	float curr;
-	
+
 	int i, j;
 	for(i=0; i<inNumSamples; ++i){
 		if(*(trig++) > 0.f){
@@ -98,7 +96,7 @@ void MeanTriggered_next_xa(MeanTriggered* unit, int inNumSamples)
 				total += circbuf[j];
 			mean = (float)(total / length);
 		}
-		
+
 		*(out++) = mean;
 	}
 
@@ -116,11 +114,11 @@ void MeanTriggered_next_xk(MeanTriggered* unit, int inNumSamples)
 	float* circbuf = unit->m_circbuf;
 	int circbufpos = unit->m_circbufpos;
 	int length = unit->m_length;
-	
+
 	// This may or may not be recalculated as we go through the loop, depending on triggering
 	float mean = unit->m_mean;
 	float curr;
-	
+
 	int i, j;
 	for(i=0; i<inNumSamples; ++i){
 		if(trig > 0.f){
@@ -136,7 +134,7 @@ void MeanTriggered_next_xk(MeanTriggered* unit, int inNumSamples)
 				total += circbuf[j];
 			mean = (float)(total / length);
 		}
-		
+
 		*(out++) = mean;
 	}
 
@@ -155,13 +153,13 @@ void MeanTriggered_Dtor(MeanTriggered* unit)
 
 
 void MedianTriggered_Ctor(MedianTriggered* unit)
-{	
+{
 	if (INRATE(1) == calc_FullRate) {
 		SETCALC(MedianTriggered_next_xa);
 	}else{
 		SETCALC(MedianTriggered_next_xk);
 	}
-	
+
 	int length = (int)ZIN0(2); // Fixed number of items to average over
 
 	unit->m_circbuf = (float*)RTAlloc(unit->mWorld, length * sizeof(float));
@@ -197,9 +195,9 @@ void MedianTriggered_next_xa(MedianTriggered* unit, int inNumSamples)
 
 	// This may or may not be recalculated as we go through the loop, depending on triggering
 	float median = unit->m_outval;
-	
+
 	float curr;
-	
+
 	int i;
 	for(i=0; i<inNumSamples; ++i){
 		if(*(trig++) > 0.f){
@@ -209,22 +207,22 @@ void MedianTriggered_next_xa(MedianTriggered* unit, int inNumSamples)
 			if(circbufpos==length){
 				circbufpos = 0;
 			}
-			
+
 			// NOW CALCULATE THE MEDIAN
-			
+
 			// Copy the data into the buffer for sorting
 			// TODO: Implement the copy more efficiently using memcpy
 			for(int i=0; i<length; ++i){
 				sortbuf[i] = circbuf[i];
 			}
-			
+
 			// Then sort
 			MedianTriggered_SelectionSort(sortbuf, length);
-			
+
 			// Then update the median
 			median = length_is_odd ? sortbuf[medianpos] : ((sortbuf[medianpos] + sortbuf[medianpos+1]) * 0.5f);
 		}
-		
+
 		*(out++) = median;
 	}
 
@@ -248,9 +246,9 @@ void MedianTriggered_next_xk(MedianTriggered* unit, int inNumSamples)
 
 	// This may or may not be recalculated as we go through the loop, depending on triggering
 	float median = unit->m_outval;
-	
+
 	float curr;
-	
+
 	int i;
 	for(i=0; i<inNumSamples; ++i){
 		if(trig > 0.f){
@@ -260,22 +258,22 @@ void MedianTriggered_next_xk(MedianTriggered* unit, int inNumSamples)
 			if(circbufpos==length){
 				circbufpos = 0;
 			}
-			
+
 			// NOW CALCULATE THE MEDIAN
-			
+
 			// Copy the data into the buffer for sorting
 			// TODO: Implement the copy more efficiently using memcpy
 			for(int i=0; i<length; ++i){
 				sortbuf[i] = circbuf[i];
 			}
-			
+
 			// Then sort
 			MedianTriggered_SelectionSort(sortbuf, length);
-			
+
 			// Then update the median
 			median = length_is_odd ? sortbuf[medianpos] : ((sortbuf[medianpos] + sortbuf[medianpos+1]) * 0.5f);
 		}
-		
+
 		*(out++) = median;
 	}
 
@@ -295,7 +293,7 @@ void MedianTriggered_Dtor(MedianTriggered* unit)
 void MedianTriggered_SelectionSort(float *array, int length)
 {
   // Algo is from http://en.wikibooks.org/wiki/Algorithm_implementation/Sorting/Selection_sort
-  
+
   // Debug:
   /*
   int lllll = length;
@@ -304,7 +302,7 @@ void MedianTriggered_SelectionSort(float *array, int length)
 	Print("%g, ", array[j]);
   }
   */
-  
+
   int max, i;
   float temp;
   while(length > 0)
@@ -333,7 +331,7 @@ void MedianTriggered_SelectionSort(float *array, int length)
 
 
 // the load function is called by the host when the plug-in is loaded
-void load(InterfaceTable *inTable)
+PluginLoad(MCLDTriggeredStats)
 {
 	ft = inTable;
 

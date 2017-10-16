@@ -143,6 +143,13 @@ inline void Clear(int numSamples, float *out)
 	memset(out, 0, numSamples * sizeof(float));
 }
 
+inline void Clear(int numSamples, double *out)
+{
+	// The memset approach is valid on any system using IEEE floating-point. On other systems, please check...
+	memset(out, 0, numSamples * sizeof(double));
+}
+
+
 inline void Copy(int numSamples, float *out, float *in)
 {
 	memcpy(out, in, numSamples * sizeof(float));
@@ -204,7 +211,7 @@ inline void Scale(int numSamples, float *out, float *in, float level)
 }
 
 // in these the pointers are assumed to already have been pre-offset.
-inline void ZCopy(int numSamples, float *out, float *in)
+inline void ZCopy(int numSamples, float *out, const float *in)
 {
 	// pointers must be 8 byte aligned
 	//assert((((long)(out+ZOFF) & 7) == 0) && (((long)(in+ZOFF) & 7) == 0));
@@ -237,6 +244,21 @@ inline void ZAccum(int numSamples, float *out, float *in)
 	LOOP(numSamples, ZXP(out) += ZXP(in); );
 }
 
+template <typename Functor>
+inline void loop(int length, Functor const & f)
+{
+	for (int i=0; i < length; ++i)
+		f();
+}
 
+template <typename Functor>
+inline void loop1(int length, Functor const & f)
+{
+	assert(length > 0);
+	int i = length;
+	do {
+		f();
+	} while (--i);
+}
 
 #endif

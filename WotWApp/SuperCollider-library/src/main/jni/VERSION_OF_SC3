@@ -1,5 +1,10 @@
-10272
+SuperCollider code is based on version 3.8.0, as tagged in SC git repository.
+https://github.com/supercollider/supercollider.git
 
-Code here is currently adapted from the trunk of the SuperCollider source, using the SVN revision given above.
+PREVIOUSLY:
+Code here was adapted from the trunk of the SuperCollider source, using the SVN revision 10272.
 https://supercollider.svn.sourceforge.net/svnroot/supercollider/trunk
 
+POSSIBLE TODO:
+
+Updating libsndfile to Version 1.0.28 available at http://www.mega-nerd.com/libsndfile/

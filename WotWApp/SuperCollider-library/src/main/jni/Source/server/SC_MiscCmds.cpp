@@ -20,7 +20,6 @@
 
 
 #include "SC_Lib.h"
-#include "SC_ComPort.h"
 #include "SC_CoreAudio.h"
 #include "SC_HiddenWorld.h"
 #include "SC_Graph.h"
@@ -33,6 +32,9 @@
 #include <new>
 #include "SC_Prototypes.h"
 #include "scsynthsend.h"
+#include "SC_WorldOptions.h"
+
+extern int gMissingNodeID;
 
 // returns number of bytes in an OSC string.
 int OSCstrlen(char *strin);
@@ -44,6 +46,7 @@ Node* Msg_GetNode(World *inWorld, sc_msg_iter& msg)
 	{
 		const char* loc = msg.gets();
 		int32 nodeID = msg.geti();
+		gMissingNodeID = nodeID;
 		node = World_GetNode(inWorld, nodeID);
 		while (*loc)
 		{
@@ -74,6 +77,7 @@ Node* Msg_GetNode(World *inWorld, sc_msg_iter& msg)
 	else
 	{
 		int32 nodeID = msg.geti();
+		gMissingNodeID = nodeID;
 		node = World_GetNode(inWorld, nodeID);
 	}
 	return node;
@@ -374,50 +378,50 @@ SCErr meth_n_mapn(World *inWorld, int inSize, char *inData, ReplyAddress* /*inRe
 SCErr meth_n_mapa(World *inWorld, int inSize, char *inData, ReplyAddress *inReply);
 SCErr meth_n_mapa(World *inWorld, int inSize, char *inData, ReplyAddress* /*inReply*/)
 {
-    sc_msg_iter msg(inSize, inData);
-    Node *node = Msg_GetNode(inWorld, msg);
-    if (!node) return kSCErr_NodeNotFound;
+	sc_msg_iter msg(inSize, inData);
+	Node *node = Msg_GetNode(inWorld, msg);
+	if (!node) return kSCErr_NodeNotFound;
 
-    while (msg.remain() >= 8) {
-	if (msg.nextTag('i') == 's') {
-	    int32* name = msg.gets4();
-	    int bus = msg.geti();
-	    Node_MapAudioControl(node, Hash(name), name, 0, bus);
-	} else {
-	    int32 index = msg.geti();
-	    int32 bus = msg.geti();
-	    Node_MapAudioControl(node, index, bus);
+	while (msg.remain() >= 8) {
+		if (msg.nextTag('i') == 's') {
+			int32* name = msg.gets4();
+			int bus = msg.geti();
+			Node_MapAudioControl(node, Hash(name), name, 0, bus);
+		} else {
+			int32 index = msg.geti();
+			int32 bus = msg.geti();
+			Node_MapAudioControl(node, index, bus);
+		}
 	}
-    }
-    return kSCErr_None;
+	return kSCErr_None;
 }
 
 SCErr meth_n_mapan(World *inWorld, int inSize, char *inData, ReplyAddress *inReply);
 SCErr meth_n_mapan(World *inWorld, int inSize, char *inData, ReplyAddress* /*inReply*/)
 {
-    sc_msg_iter msg(inSize, inData);
-    Node *node = Msg_GetNode(inWorld, msg);
-    if (!node) return kSCErr_NodeNotFound;
+	sc_msg_iter msg(inSize, inData);
+	Node *node = Msg_GetNode(inWorld, msg);
+	if (!node) return kSCErr_NodeNotFound;
 
-    while (msg.remain() >= 12) {
-	if (msg.nextTag('i') == 's') {
-	    int32* name = msg.gets4();
-	    int32 hash = Hash(name);
-	    int bus = msg.geti();
-	    int n = msg.geti();
-	    for (int i=0; i<n; ++i) {
-		Node_MapAudioControl(node, hash, name, i, bus == -1 ? -1 : bus+i);
-	    }
-	} else {
-	    int32 index = msg.geti();
-	    int32 bus = msg.geti();
-	    int n = msg.geti();
-	    for (int i=0; i<n; ++i) {
-		Node_MapAudioControl(node, index+i, bus == -1 ? -1 : bus+i);
-	    }
+	while (msg.remain() >= 12) {
+		if (msg.nextTag('i') == 's') {
+			int32* name = msg.gets4();
+			int32 hash = Hash(name);
+			int bus = msg.geti();
+			int n = msg.geti();
+			for (int i=0; i<n; ++i) {
+				Node_MapAudioControl(node, hash, name, i, bus == -1 ? -1 : bus+i);
+			}
+		} else {
+			int32 index = msg.geti();
+			int32 bus = msg.geti();
+			int n = msg.geti();
+			for (int i=0; i<n; ++i) {
+				Node_MapAudioControl(node, index+i, bus == -1 ? -1 : bus+i);
+			}
+		}
 	}
-    }
-    return kSCErr_None;
+	return kSCErr_None;
 }
 
 SCErr meth_n_set(World *inWorld, int inSize, char *inData, ReplyAddress *inReply);
@@ -588,8 +592,8 @@ SCErr meth_n_setn(World *inWorld, int inSize, char *inData, ReplyAddress* /*inRe
 						Node_MapControl(node, hash, name, i, bus);
 					}
 					if (*string == 'a') {
-					    int bus = sc_atoi(string+1);
-					    Node_MapAudioControl(node, hash, name, i, bus);
+						int bus = sc_atoi(string+1);
+						Node_MapAudioControl(node, hash, name, i, bus);
 					}
 
 				} else {
@@ -608,8 +612,8 @@ SCErr meth_n_setn(World *inWorld, int inSize, char *inData, ReplyAddress* /*inRe
 						Node_MapControl(node, index+i, bus);
 					}
 					if (*string == 'a') {
-					    int bus = sc_atoi(string+1);
-					    Node_MapAudioControl(node, index+i, bus);
+						int bus = sc_atoi(string+1);
+						Node_MapAudioControl(node, index+i, bus);
 					}
 				} else {
 					float32 value = msg.getf();
@@ -772,7 +776,9 @@ SCErr meth_d_free(World *inWorld, int inSize, char *inData, ReplyAddress *inRepl
 	while (msg.remain()) {
 		int32* defname = msg.gets4();
 		if (!defname) return kSCErr_SynthDefNotFound;
-		GraphDef_Remove(inWorld, defname);
+		SCErr err = GraphDef_Remove(inWorld, defname);
+	if(err != kSCErr_None)
+		return err;
 	}
 	return kSCErr_None;
 }
@@ -829,6 +835,8 @@ SCErr meth_s_new(World *inWorld, int inSize, char *inData, ReplyAddress* /*inRep
 		case 4 : {
 			Node *replaceThisNode = Msg_GetNode(inWorld, msg);
 			if (!replaceThisNode) return kSCErr_NodeNotFound;
+			Node_RemoveID(replaceThisNode);
+
 			err = Graph_New(inWorld, def, nodeID, &msg, &graph,true);
 			if (err) return err;
 			Node_Replace(&graph->mNode, replaceThisNode);
@@ -971,6 +979,9 @@ SCErr meth_g_new(World *inWorld, int inSize, char *inData, ReplyAddress* /*inRep
 			case 4 : {
 				Node *replaceThisNode = Msg_GetNode(inWorld, msg);
 				if (!replaceThisNode) return kSCErr_TargetNodeNotFound;
+				if (replaceThisNode->mID == 0) return kSCErr_ReplaceRootGroup;
+				Node_RemoveID(replaceThisNode);
+
 				err = Group_New(inWorld, newGroupID, &newGroup);
 				if (err) return err;
 				Node_Replace(&newGroup->mNode, replaceThisNode);
@@ -1079,7 +1090,6 @@ SCErr meth_n_after(World *inWorld, int inSize, char *inData, ReplyAddress* /*inR
 SCErr meth_n_order(World *inWorld, int inSize, char *inData, ReplyAddress *inReply);
 SCErr meth_n_order(World *inWorld, int inSize, char *inData, ReplyAddress* /*inReply*/)
 {
-	SCErr err;
 
 	Node *prevNode = 0;
 	Node *node = 0;
@@ -1302,7 +1312,9 @@ SCErr meth_quit(World *inWorld, int inSize, char *inData, ReplyAddress *inReply)
 SCErr meth_clearSched(World *inWorld, int inSize, char *inData, ReplyAddress *inReply);
 SCErr meth_clearSched(World *inWorld, int inSize, char *inData, ReplyAddress *inReply)
 {
-	inWorld->hw->mAudioDriver->ClearSched();
+	if(inWorld->mRealTime){
+		inWorld->hw->mAudioDriver->ClearSched();
+	}
 	return kSCErr_None;
 }
 
@@ -1801,7 +1813,7 @@ SCErr meth_s_noid(World *inWorld, int inSize, char *inData, ReplyAddress* inRepl
 		Graph *graph = Msg_GetGraph(inWorld, msg);
 		if (!graph) continue;
 
-		Graph_RemoveID(inWorld, graph);
+		Node_RemoveID(&graph->mNode);
 	}
 
 	return kSCErr_None;
@@ -1870,9 +1882,9 @@ void initMiscCommands()
 	//NEW_COMMAND(n_cmd);
 	NEW_COMMAND(n_map);
 	NEW_COMMAND(n_mapn);
-        NEW_COMMAND(n_mapa);
-        NEW_COMMAND(n_mapan);
-        NEW_COMMAND(n_set);
+	NEW_COMMAND(n_mapa);
+	NEW_COMMAND(n_mapan);
+	NEW_COMMAND(n_set);
 	NEW_COMMAND(n_setn);
 	NEW_COMMAND(n_fill);
 
@@ -1928,5 +1940,3 @@ void initMiscCommands()
 
 	NEW_COMMAND(error);
 }
-
-

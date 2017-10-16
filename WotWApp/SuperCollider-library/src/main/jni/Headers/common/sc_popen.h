@@ -1,14 +1,13 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-#ifdef _WIN32
-#include <pthread.h>
-#else
+#ifndef _WIN32
 #include <unistd.h>
 #include <sys/wait.h>
 #endif
 
 #ifdef _WIN32
+#include "SC_Win32Utils.h"
 /*
  *	Signal stuff
  *	For WIN32, there is no wait() call so there are no wait() macros
@@ -28,4 +27,5 @@
 #endif
 
 FILE * sc_popen(const char *command, pid_t *pidp, const char *type);
+FILE * sc_popen_argv(const char *filename, char *const argv[], pid_t *pidp, const char *type);
 int sc_pclose(FILE *iop, pid_t mPid);

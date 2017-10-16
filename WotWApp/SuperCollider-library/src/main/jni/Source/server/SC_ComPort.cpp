@@ -1,752 +1,540 @@
 /*
 	SuperCollider real time audio synthesis system
-    Copyright (c) 2002 James McCartney. All rights reserved.
+	Copyright (c) 2002 James McCartney. All rights reserved.
 	http://www.audiosynth.com
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
+	This program is free software; you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation; either version 2 of the License, or
+	(at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
+	You should have received a copy of the GNU General Public License
+	along with this program; if not, write to the Free Software
+	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
-#ifndef _WIN32
-# include "SC_ComPort.h"
-#else
-# include "../../headers/server/SC_ComPort.h"
-#endif
-
 #include "SC_Endian.h"
-#include "SC_Lock.h"
 #include "SC_HiddenWorld.h"
 #include "SC_WorldOptions.h"
 #include "sc_msg_iter.h"
+#include "SC_OscUtils.hpp"
+
 #include <ctype.h>
 #include <stdexcept>
 #include <stdarg.h>
+#include <cerrno>
 
-#ifdef _WIN32
-	# include <winsock2.h>
-	typedef int socklen_t;
-	# define bzero( ptr, count ) memset( ptr, 0, count )
-#else
-	#include <netinet/tcp.h>
-#endif
+#include <sys/types.h>
+#include "OSC_Packet.h"
 
-#if defined(__linux__) || defined(__FreeBSD__)
-	#include <errno.h>
-	#include <unistd.h>
-#endif
+#include <boost/asio.hpp>
+#include <boost/array.hpp>
+#include <boost/bind.hpp>
+#include <boost/enable_shared_from_this.hpp>
+#include <boost/typeof/typeof.hpp>
 
-#if defined(SC_IPHONE) || defined(__APPLE__)
-	#include <errno.h>
-#endif
+#include "SC_Lock.h"
+
+#include "nova-tt/semaphore.hpp"
+#include "nova-tt/thread_priority.hpp"
 
 #ifdef USE_RENDEZVOUS
-	#include "Rendezvous.h"
+#include "Rendezvous.h"
 #endif
 
-int recvall(int socket, void *msg, size_t len);
-int sendallto(int socket, const void *msg, size_t len, struct sockaddr *toaddr, int addrlen);
-int sendall(int socket, const void *msg, size_t len);
 
 bool ProcessOSCPacket(World *inWorld, OSC_Packet *inPacket);
 
-void dumpOSCmsg(int inSize, char* inData)
+namespace scsynth {
+
+const size_t kMaxUDPSize = 65535;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+static bool UnrollOSCPacket(World *inWorld, int inSize, char *inData, OSC_Packet *inPacket)
 {
-	int size;
-	char *data;
+	if (!strcmp(inData, "#bundle")) { // is a bundle
+		char *data;
+		char *dataEnd = inData + inSize;
+		int len = 16;
+		bool hasNestedBundle = false;
 
-	if (inData[0]) {
-		char *addr = inData;
-		data = OSCstrskip(inData);
-		size = inSize - (data - inData);
-		scprintf("[ \"%s\",", addr);
-	}
-	else
-	{
-		scprintf("[ %d,", OSCint(inData));
-		data = inData + 4;
-		size = inSize - 4;
-	}
+		// get len of nested messages only, without len of nested bundle(s)
+		data = inData + 16; // skip bundle header
+		while (data < dataEnd) {
+			int32 msgSize = OSCint(data);
+			data += sizeof(int32);
+			if (strcmp(data, "#bundle")) // is a message
+				len += sizeof(int32) + msgSize;
+			else
+				hasNestedBundle = true;
+			data += msgSize;
+		}
 
-	sc_msg_iter msg(size, data);
+		if (hasNestedBundle) {
+			if (len > 16) { // not an empty bundle
+				// add nested messages to bundle buffer
+				char *buf = (char*)malloc(len);
+				inPacket->mSize = len;
+				inPacket->mData = buf;
 
-	while (msg.remain())
-	{
-		char c = msg.nextTag('i');
-		switch(c)
-		{
-			case 'i' :
-				scprintf(" %d", msg.geti());
-				break;
-			case 'f' :
-				scprintf(" %g", msg.getf());
-				break;
-			case 'd' :
-				scprintf(" %g", msg.getd());
-				break;
-			case 's' :
-				scprintf(" \"%s\"", msg.gets());
-				break;
-			case 'b' :
-				scprintf(" DATA[%d]", msg.getbsize());
-				msg.skipb();
-				break;
-			case '[' :
-				scprintf("[");
-				msg.count++;
-				break;
-			case ']' :
-				scprintf("]");
-				msg.count++;
-				break;
-		    default :
-				scprintf(" !unknown tag '%c' 0x%02x !", isprint(c)?c:'?', (unsigned char)c & 255);
-				goto leave;
-		}
-		if (msg.remain() && (c!= '[')) scprintf(",");
-	}
-leave:
-	scprintf(" ]");
-}
+				memcpy(buf, inData, 16); // copy bundle header
+				data = inData + 16; // skip bundle header
+				while (data < dataEnd) {
+					int32 msgSize = OSCint(data);
+					data += sizeof(int32);
+					if (strcmp(data, "#bundle")) { // is a message
+						memcpy(buf, data-sizeof(int32), sizeof(int32) + msgSize);
+						buf += msgSize;
+					}
+					data += msgSize;
+				}
 
-void hexdump(int size, char* data)
-{
-	char ascii[20];
-	int padsize = (size + 15) & -16;
-	scprintf("size %d\n", size);
-	for (int i=0; i<padsize; ++i)
-	{
-		if ((i&15)==0)
-		{
-			scprintf("%4d   ", i);
-		}
-		if (i >= size)
-		{
-			scprintf("   ");
-			ascii[i&15] = 0;
-		}
-		else
-		{
-			scprintf("%02x ", (unsigned char)data[i] & 255);
+				// process this packet without its nested bundle(s)
+				if(!ProcessOSCPacket(inWorld, inPacket)) {
+					free(buf);
+					return false;
+				}
+			}
 
-			if (isprint(data[i])) ascii[i&15] = data[i];
-			else ascii[i&15] = '.';
-		}
-		if ((i&15)==15)
-		{
-			ascii[16] = 0;
-			scprintf("  |%s|\n", ascii);
-		}
-		else if ((i&3)==3)
-		{
-			scprintf(" ");
-		}
-	}
-	scprintf("\n");
-}
-
-void dumpOSC(int mode, int size, char* inData)
-{
-	if (mode & 1)
-	{
-		if (strcmp(inData, "#bundle") == 0)
-		{
-			char* data = inData + 8;
-			scprintf("[ \"#bundle\", %lld, ", OSCtime(data));
-			data += 8;
-			char* dataEnd = inData + size;
+			// process nested bundle(s)
+			data = inData + 16; // skip bundle header
 			while (data < dataEnd) {
 				int32 msgSize = OSCint(data);
 				data += sizeof(int32);
-				scprintf("\n    ");
-				dumpOSCmsg(msgSize, data);
+				if (!strcmp(data, "#bundle")) { // is a bundle
+					OSC_Packet* packet = (OSC_Packet*)malloc(sizeof(OSC_Packet));
+					memcpy(packet, inPacket, sizeof(OSC_Packet)); // clone inPacket
+
+					if(!UnrollOSCPacket(inWorld, msgSize, data, packet)) {
+						free(packet);
+						return false;
+					}
+				}
 				data += msgSize;
-				if (data < dataEnd) scprintf(",");
 			}
-			scprintf("\n]\n");
+		} else { // !hasNestedBundle
+			char *buf = (char*)malloc(inSize);
+			inPacket->mSize = inSize;
+			inPacket->mData = buf;
+			memcpy(buf, inData, inSize);
+
+			if(!ProcessOSCPacket(inWorld, inPacket)) {
+				free(buf);
+				return false;
+			}
 		}
-		else
-		{
-			dumpOSCmsg(size, inData);
-			scprintf("\n");
+	} else { // is a message
+		char *buf = (char*)malloc(inSize);
+		inPacket->mSize = inSize;
+		inPacket->mData = buf;
+		memcpy(buf, inData, inSize);
+
+		if(!ProcessOSCPacket(inWorld, inPacket)) {
+			free(buf);
+			return false;
 		}
 	}
 
-	if (mode & 2) hexdump(size, inData);
+	return true;
 }
 
-bool World_SendPacketWithContext(World *inWorld, int inSize, char *inData, ReplyFunc inFunc, void *inContext)
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+thread gAsioThread;
+boost::asio::io_service ioService;
+
+const int kTextBufSize = 65536;
+
+
+static void udp_reply_func(struct ReplyAddress *addr, char* msg, int size)
 {
-	bool result = false;
+	using namespace boost::asio;
+
+	ip::udp::socket * socket = reinterpret_cast<ip::udp::socket*>(addr->mReplyData);
+	ip::udp::endpoint endpoint (addr->mAddress, addr->mPort);
+
+	boost::system::error_code errc;
+	socket->send_to( buffer(msg, size), endpoint, 0, errc);
+
+	if (errc)
+		printf("%s\n", errc.message().c_str());
+}
+
+static void tcp_reply_func(struct ReplyAddress *addr, char* msg, int size)
+{
+	// Write size as 32bit unsigned network-order integer
+	uint32 u = sc_htonl(size) ;
+
+	using namespace boost::asio;
+
+	// FIXME: connection could be destroyed!
+	ip::tcp::socket * socket = reinterpret_cast<ip::tcp::socket*>(addr->mReplyData);
+
+#if 0
+	ip::tcp::socket::message_flags flags = 0;
+#ifdef MSG_NOSIGNAL
+	flags = MSG_NOSIGNAL;
+#endif
+#endif
+
+	boost::system::error_code errc;
+	write( *socket, buffer(&u, sizeof(uint32) ), errc );
+	if (errc)
+		printf("%s\n", errc.message().c_str());
+
+	write( *socket, buffer(msg, size), errc );
+	if (errc)
+		printf("%s\n", errc.message().c_str());
+}
+
+
+class SC_UdpInPort
+{
+	struct World * mWorld;
+	int mPortNum;
+    std::string mbindTo;
+	boost::array<char, kTextBufSize> recvBuffer;
+
+	boost::asio::ip::udp::endpoint remoteEndpoint;
+
+#ifdef USE_RENDEZVOUS
+	thread mRendezvousThread;
+#endif
+
+	void handleReceivedUDP(const boost::system::error_code& error,
+						   std::size_t bytes_transferred)
+	{
+		if (error == boost::asio::error::operation_aborted)
+			return;    /* we're done */
+
+		if (error) {
+			printf("SC_UdpInPort: received error - %s", error.message().c_str());
+			startReceiveUDP();
+			return;
+		}
+
+		if (mWorld->mDumpOSC) dumpOSC(mWorld->mDumpOSC, bytes_transferred, recvBuffer.data());
+
+		OSC_Packet * packet = (OSC_Packet*)malloc(sizeof(OSC_Packet));
+
+		packet->mReplyAddr.mProtocol = kUDP;
+		packet->mReplyAddr.mAddress  = remoteEndpoint.address();
+		packet->mReplyAddr.mPort     = remoteEndpoint.port();
+		packet->mReplyAddr.mSocket   = udpSocket.native_handle();
+		packet->mReplyAddr.mReplyFunc = udp_reply_func;
+		packet->mReplyAddr.mReplyData = (void*)&udpSocket;
+
+		packet->mSize = bytes_transferred;
+
+		if (!UnrollOSCPacket(mWorld, bytes_transferred, recvBuffer.data(), packet))
+			free(packet);
+
+		startReceiveUDP();
+	}
+
+	void startReceiveUDP()
+	{
+		using namespace boost;
+		udpSocket.async_receive_from(asio::buffer(recvBuffer), remoteEndpoint,
+									 boost::bind(&SC_UdpInPort::handleReceivedUDP, this,
+												 asio::placeholders::error, asio::placeholders::bytes_transferred));
+	}
+
+public:
+	boost::asio::ip::udp::socket udpSocket;
+
+	SC_UdpInPort(struct World * world, std::string bindTo, int inPortNum):
+		mWorld(world), mPortNum(inPortNum), mbindTo(bindTo), udpSocket(ioService)
+	{
+		using namespace boost::asio;
+		BOOST_AUTO(protocol, ip::udp::v4());
+		udpSocket.open(protocol);
+
+		udpSocket.bind(ip::udp::endpoint(boost::asio::ip::address::from_string(bindTo), inPortNum));
+
+		boost::asio::socket_base::send_buffer_size option(65536);
+		udpSocket.set_option(option);
+
+#ifdef USE_RENDEZVOUS
+		if (world->mRendezvous) {
+			thread thread( boost::bind( PublishPortToRendezvous, kSCRendezvous_UDP, sc_htons(mPortNum) ) );
+			mRendezvousThread = std::move(thread);
+		}
+#endif
+
+		startReceiveUDP();
+	}
+};
+
+
+class SC_TcpConnection:
+	public boost::enable_shared_from_this<SC_TcpConnection>
+{
+public:
+	struct World * mWorld;
+	typedef boost::shared_ptr<SC_TcpConnection> pointer;
+	boost::asio::ip::tcp::socket socket;
+
+	SC_TcpConnection(struct World * world, boost::asio::io_service & ioService,
+					 class SC_TcpInPort * parent):
+		mWorld(world), socket(ioService), mParent(parent)
+	{}
+
+	~SC_TcpConnection();
+
+	void start()
+	{
+		const int kMaxPasswordLen = 32;
+		char buf[kMaxPasswordLen];
+		int32 size;
+		int32 msglen;
+
+		// first message must be the password. 4 tries.
+		bool validated = mWorld->hw->mPassword[0] == 0;
+		for (int i=0; !validated && i<4; ++i) {
+			// FIXME: error handling!
+			size = boost::asio::read(socket, boost::asio::buffer((void*)&msglen, sizeof(int32)) );
+			if (size < 0) return;
+
+			msglen = sc_ntohl(msglen);
+			if (msglen > kMaxPasswordLen)
+				break;
+
+			size = boost::asio::read(socket, boost::asio::buffer((void*)buf, msglen) );
+			if (size < 0) return;
+
+			validated = strcmp(buf, mWorld->hw->mPassword) == 0;
+
+			std::this_thread::sleep_for(std::chrono::seconds(i + 1)); // thwart cracking.
+		}
+
+		if (validated)
+			startReceiveMessage();
+	}
+
+private:
+	void startReceiveMessage()
+	{
+		namespace ba = boost::asio;
+		async_read(socket, ba::buffer(&OSCMsgLength, sizeof(OSCMsgLength)),
+				   boost::bind(&SC_TcpConnection::handleLengthReceived, shared_from_this(),
+							   ba::placeholders::error,
+							   ba::placeholders::bytes_transferred)
+				   );
+	}
+
+	int32 OSCMsgLength;
+	char * data;
+	class SC_TcpInPort * mParent;
+
+	void handleLengthReceived(const boost::system::error_code& error,
+							  size_t bytes_transferred)
+	{
+		if (error) {
+			if (error == boost::asio::error::eof)
+				return; // connection closed
+
+			printf("handleLengthReceived: error %s", error.message().c_str());
+			return;
+		}
+
+		namespace ba = boost::asio;
+		// msglen is in network byte order
+		OSCMsgLength = sc_ntohl(OSCMsgLength);
+
+		data = (char*)malloc(OSCMsgLength);
+
+		async_read(socket, ba::buffer(data, OSCMsgLength),
+				   boost::bind(&SC_TcpConnection::handleMsgReceived, shared_from_this(),
+							   ba::placeholders::error,
+							   ba::placeholders::bytes_transferred));
+	}
+
+	void handleMsgReceived(const boost::system::error_code& error,
+						   size_t bytes_transferred)
+	{
+		if (error) {
+			free(data);
+			if (error == boost::asio::error::eof)
+				return; // connection closed
+
+			printf("handleMsgReceived: error %s", error.message().c_str());
+			return;
+		}
+
+		assert(bytes_transferred == OSCMsgLength);
+
+		if (mWorld->mDumpOSC) dumpOSC(mWorld->mDumpOSC, bytes_transferred, data);
+
+		OSC_Packet * packet = (OSC_Packet*)malloc(sizeof(OSC_Packet));
+
+		packet->mReplyAddr.mProtocol = kTCP;
+		packet->mReplyAddr.mReplyFunc = tcp_reply_func;
+		packet->mReplyAddr.mReplyData = (void*)&socket;
+
+		packet->mSize = OSCMsgLength;
+
+		if (!UnrollOSCPacket(mWorld, bytes_transferred, data, packet))
+			free(packet);
+
+		startReceiveMessage();
+	}
+};
+
+class SC_TcpInPort
+{
+	struct World * mWorld;
+	boost::asio::ip::tcp::acceptor acceptor;
+
+#ifdef USE_RENDEZVOUS
+	thread mRendezvousThread;
+#endif
+
+	std::atomic<int> mAvailableConnections;
+	friend class SC_TcpConnection;
+
+public:
+	SC_TcpInPort(struct World * world, std::string bindTo, int inPortNum, int inMaxConnections, int inBacklog):
+		mWorld(world),
+        acceptor(ioService, boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string(bindTo), inPortNum)),
+		mAvailableConnections(inMaxConnections)
+	{
+		// FIXME: backlog???
+
+#ifdef USE_RENDEZVOUS
+		if (world->mRendezvous) {
+			thread thread( boost::bind( PublishPortToRendezvous, kSCRendezvous_TCP, sc_htons(inPortNum) ) );
+			mRendezvousThread = std::move(thread);
+		}
+#endif
+
+		startAccept();
+	}
+
+	void startAccept()
+	{
+		if (mAvailableConnections > 0) {
+			--mAvailableConnections;
+			SC_TcpConnection::pointer newConnection (new SC_TcpConnection(mWorld, ioService, this));
+
+			acceptor.async_accept(newConnection->socket,
+								  boost::bind(&SC_TcpInPort::handleAccept, this, newConnection,
+											  boost::asio::placeholders::error));
+		}
+	}
+
+	void handleAccept(SC_TcpConnection::pointer newConnection,
+					  const boost::system::error_code& error)
+	{
+		if (!error)
+			newConnection->start();
+		startAccept();
+	}
+
+	void connectionDestroyed()
+	{
+		if (!mWorld->mRunning)
+			return;
+		mAvailableConnections += 1;
+		startAccept();
+	}
+};
+
+SC_TcpConnection::~SC_TcpConnection()
+{
+	mParent->connectionDestroyed();
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+static void asioFunction()
+{
+#ifdef NOVA_TT_PRIORITY_RT
+	std::pair<int, int> priorities = nova::thread_priority_interval_rt();
+	nova::thread_set_priority_rt((priorities.first + priorities.second)/2);
+#else
+	std::pair<int, int> priorities = nova::thread_priority_interval();
+	nova::thread_set_priority(priorities.second);
+#endif
+
+	boost::asio::io_service::work work(ioService);
+	ioService.run();
+}
+
+void startAsioThread()
+{
+	thread asioThread (&asioFunction);
+	gAsioThread = std::move(asioThread);
+}
+
+void stopAsioThread()
+{
+	ioService.stop();
+	gAsioThread.join();
+}
+
+}
+
+using namespace scsynth;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+SCSYNTH_DLLEXPORT_C bool World_SendPacketWithContext(World *inWorld, int inSize, char *inData, ReplyFunc inFunc, void *inContext)
+{
 	if (inSize > 0) {
 		if (inWorld->mDumpOSC) dumpOSC(inWorld->mDumpOSC, inSize, inData);
 
 		OSC_Packet* packet = (OSC_Packet*)malloc(sizeof(OSC_Packet));
-		char *data = (char*)malloc(inSize);
-		packet->mReplyAddr.mSockAddr.sin_addr.s_addr = 0;
-		packet->mReplyAddr.mSockAddr.sin_port = 0;
+
+		packet->mReplyAddr.mAddress = boost::asio::ip::address();
 		packet->mReplyAddr.mReplyFunc = inFunc;
 		packet->mReplyAddr.mReplyData = inContext;
-		packet->mSize = inSize;
-		packet->mData = data;
 		packet->mReplyAddr.mSocket = 0;
-		memcpy(data, inData, inSize);
 
-		result = ProcessOSCPacket(inWorld, packet);
+		if(!UnrollOSCPacket(inWorld, inSize, inData, packet)) {
+			free(packet);
+			return false;
+		}
 	}
-	return result;
+	return true;
 }
 
-bool World_SendPacket(World *inWorld, int inSize, char *inData, ReplyFunc inFunc)
+SCSYNTH_DLLEXPORT_C bool World_SendPacket(World *inWorld, int inSize, char *inData, ReplyFunc inFunc)
 {
 	return World_SendPacketWithContext(inWorld, inSize, inData, inFunc, 0);
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-SC_CmdPort::SC_CmdPort(struct World *inWorld) : mWorld(inWorld)
+SCSYNTH_DLLEXPORT_C int World_OpenUDP(struct World *inWorld, const char *bindTo, int inPort)
 {
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-SC_ComPort::SC_ComPort(struct World *inWorld, int inPortNum)
-	: SC_CmdPort(inWorld), mPortNum(inPortNum), mSocket(-1)
-{
-}
-
-SC_ComPort::~SC_ComPort()
-{
-#ifdef _WIN32
-    if (mSocket != -1) closesocket(mSocket);
-#else
-    if (mSocket != -1) close(mSocket);
-#endif
-}
-
-void* com_thread_func(void* arg);
-void* com_thread_func(void* arg)
-{
-    SC_CmdPort *thread = (SC_CmdPort*)arg;
-    void* result = thread->Run();
-    return result;
-}
-
-void set_real_time_priority(pthread_t thread);
-void set_real_time_priority(pthread_t thread)
-{
-	int policy;
-	struct sched_param param;
-
-	pthread_getschedparam (thread, &policy, &param);
-#ifdef __linux__
-	policy = SCHED_FIFO;
-	const char* env = getenv("SC_SCHED_PRIO");
-	// jack uses a priority of 10 in realtime mode, so this is a good default
-	const int defprio = 5;
-	const int minprio = sched_get_priority_min(policy);
-	const int maxprio = sched_get_priority_max(policy);
-	const int prio = env ? atoi(env) : defprio;
-	param.sched_priority = sc_clip(prio, minprio, maxprio);
-#else
-	policy = SCHED_RR;         // round-robin, AKA real-time scheduling
-	param.sched_priority = 63; // you'll have to play with this to see what it does
-#endif
-	pthread_setschedparam (thread, policy, &param);
-}
-
-void SC_CmdPort::Start()
-{
-    pthread_create (&mThread, NULL, com_thread_func, (void*)this);
-    set_real_time_priority(mThread);
-}
-
-#ifdef USE_RENDEZVOUS
-void* rendezvous_thread_func(void* arg);
-void* rendezvous_thread_func(void* arg)
-{
-	SC_ComPort* port = reinterpret_cast<SC_ComPort*>(arg);
-	port->PublishToRendezvous();
-	return NULL;
-}
-
-void SC_UdpInPort::PublishToRendezvous()
-{
-	PublishPortToRendezvous(kSCRendezvous_UDP, htons(mPortNum));
-}
-
-void SC_TcpInPort::PublishToRendezvous()
-{
-	PublishPortToRendezvous(kSCRendezvous_TCP, htons(mPortNum));
-}
-
-#endif
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-SC_UdpInPort::SC_UdpInPort(struct World *inWorld, int inPortNum)
-	: SC_ComPort(inWorld, inPortNum)
-{
-	if ((mSocket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		throw std::runtime_error("failed to create udp socket\n");
+	try {
+		new SC_UdpInPort(inWorld, bindTo, inPort);
+		return true;
+	} catch (std::exception& exc) {
+		scprintf("Exception in World_OpenUDP: %s\n", exc.what());
+	} catch (...) {
 	}
-
-	{
-		int bufsize = 65536;
-#ifdef _WIN32
-		setsockopt(mSocket, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(bufsize));
-#else
-		setsockopt(mSocket, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(bufsize));
-#endif
-	}
-
-	//scprintf("@@@ sizeof(ReplyAddress) %d\n", sizeof(ReplyAddress));
-
-	bzero((char *)&mBindSockAddr, sizeof(mBindSockAddr));
-	mBindSockAddr.sin_family = AF_INET;
-	mBindSockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	mBindSockAddr.sin_port = htons(mPortNum);
-
-	if (bind(mSocket, (struct sockaddr *)&mBindSockAddr, sizeof(mBindSockAddr)) < 0) {
-		throw std::runtime_error("unable to bind udp socket\n");
-	}
-
-	Start();
-
-#ifdef USE_RENDEZVOUS
-	if(inWorld->mRendezvous){
-		pthread_create(&mRendezvousThread,
-			NULL,
-			rendezvous_thread_func,
-			(void*)this);
-	}
-#endif
+	return false;
 }
 
-SC_UdpInPort::~SC_UdpInPort()
+SCSYNTH_DLLEXPORT_C int World_OpenTCP(struct World *inWorld, const char *bindTo, int inPort, int inMaxConnections, int inBacklog)
 {
-#ifdef _WIN32
-    if (mSocket != -1) closesocket(mSocket);
-#else
-	if (mSocket != -1) close(mSocket);
-#endif
+	try {
+		new SC_TcpInPort(inWorld, bindTo, inPort, inMaxConnections, inBacklog);
+		return true;
+	} catch (std::exception& exc) {
+		scprintf("Exception in World_OpenTCP: %s\n", exc.what());
+	} catch (...) {
+	}
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void DumpReplyAddress(ReplyAddress *inReplyAddress)
-{
-	scprintf("mSockAddrLen %d\n", inReplyAddress->mSockAddrLen);
-	scprintf("mSocket %d\n", inReplyAddress->mSocket);
-#ifdef __APPLE__
-	scprintf("mSockAddr.sin_len %d\n", inReplyAddress->mSockAddr.sin_len);
-#endif
-	scprintf("mSockAddr.sin_family %d\n", inReplyAddress->mSockAddr.sin_family);
-	scprintf("mSockAddr.sin_port %d\n", inReplyAddress->mSockAddr.sin_port);
-	scprintf("mSockAddr.sin_addr.s_addr %d\n", inReplyAddress->mSockAddr.sin_addr.s_addr);
-	scprintf("mReplyFunc %08X\n", (intptr_t)inReplyAddress->mReplyFunc);
-}
-
-/*
-int32 GetHash(ReplyAddress *inReplyAddress)
-{
-	int32 hash = Hash(inReplyAddress->mSockAddr.sin_addr.s_addr);
-
-	hash += (inReplyAddress->mSockAddr.sin_len << 24)
-		| (inReplyAddress->mSockAddr.sin_family << 16)
-		| inReplyAddress->mSockAddr.sin_port;
-
-	return Hash(hash);
-}
-
-ReplyAddress GetKey(ReplyAddress *inReplyAddress)
-{
-	return *inReplyAddress
-}
-*/
-
-bool operator==(const ReplyAddress& a, const ReplyAddress& b)
-{
-	return a.mSockAddr.sin_addr.s_addr == b.mSockAddr.sin_addr.s_addr
-		&& a.mSockAddr.sin_family == b.mSockAddr.sin_family
-		&& a.mSockAddr.sin_port == b.mSockAddr.sin_port
-#ifdef __APPLE__
-		&& a.mSockAddr.sin_len == b.mSockAddr.sin_len
-#endif
-		&& a.mSocket == b.mSocket;
-}
-
-void udp_reply_func(struct ReplyAddress *addr, char* msg, int size);
-void udp_reply_func(struct ReplyAddress *addr, char* msg, int size)
-{
-	int total = sendallto(addr->mSocket, msg, size, (sockaddr*)&addr->mSockAddr, addr->mSockAddrLen);
-	if (total < size) DumpReplyAddress(addr);
-}
-
-ReplyFunc SC_UdpInPort::GetReplyFunc()
-{
-	return udp_reply_func;
-}
-
-void* SC_UdpInPort::Run()
-{
-	OSC_Packet *packet = 0;
-	while (true) {
-		if (!packet) {
-			// preallocate packet before we need it.
-			packet = (OSC_Packet*)malloc(sizeof(OSC_Packet));
-		}
-
-		packet->mReplyAddr.mSockAddrLen = sizeof(sockaddr_in);
-#ifdef _WIN32
-		int size = recvfrom(mSocket, (char *)mReadBuf, kMaxUDPSize , 0,
-#else
-		int size = recvfrom(mSocket, mReadBuf, kMaxUDPSize , 0,
-#endif
-								(struct sockaddr *) &packet->mReplyAddr.mSockAddr, (socklen_t*)&packet->mReplyAddr.mSockAddrLen);
-
-		if (size > 0) {
-			char *data = (char*)malloc(size);
-			memcpy(data, mReadBuf, size);
-			if (mWorld->mDumpOSC) dumpOSC(mWorld->mDumpOSC, size, data);
-
-			packet->mReplyAddr.mReplyFunc = udp_reply_func;
-			packet->mReplyAddr.mReplyData = 0;
-			packet->mSize = size;
-			packet->mData = data;
-			packet->mReplyAddr.mSocket = mSocket;
-
-			if (!ProcessOSCPacket(mWorld, packet))
-			{
-				scprintf("command FIFO full\n");
-				free(data);
-				free(packet);
-			}
-			packet = 0;
-			data = 0;
-		}
-	}
-	return 0;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-SC_TcpInPort::SC_TcpInPort(struct World *inWorld, int inPortNum, int inMaxConnections, int inBacklog)
-	: SC_ComPort(inWorld, inPortNum), mConnectionAvailable(inMaxConnections),
-        mBacklog(inBacklog)
-{
-    if((mSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        throw std::runtime_error("failed to create tcp socket\n");
-    }
-
-	//const int on = 1;
-	//setsockopt( mSocket, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-
-    bzero((char *)&mBindSockAddr, sizeof(mBindSockAddr));
-    mBindSockAddr.sin_family = AF_INET;
-    mBindSockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    mBindSockAddr.sin_port = htons(mPortNum);
-
-    if(bind(mSocket, (struct sockaddr *)&mBindSockAddr, sizeof(mBindSockAddr)) < 0)
-    {
-        throw std::runtime_error("unable to bind tcp socket\n");
-    }
-
-    if(listen(mSocket, mBacklog) < 0)
-    {
-        throw std::runtime_error("unable to listen tcp socket\n");
-    }
-
-    Start();
-#ifdef USE_RENDEZVOUS
-	if(inWorld->mRendezvous){
-		pthread_create(&mRendezvousThread,
-			NULL,
-			rendezvous_thread_func,
-			(void*)this);
-	}
-#endif
-}
-
-void* SC_TcpInPort::Run()
-{
-    while (true)
-    {
-        mConnectionAvailable.Acquire();
-        struct sockaddr_in address; /* Internet socket address stuct */
-        socklen_t addressSize=sizeof(struct sockaddr_in);
-        int socket = accept(mSocket,(struct sockaddr*)&address,&addressSize);
-        if (socket < 0) {
-        	mConnectionAvailable.Release();
-        } else {
-        	new SC_TcpConnectionPort(mWorld, this, socket);
-        }
-    }
-    return 0;
-}
-
-void SC_TcpInPort::ConnectionTerminated()
-{
-        mConnectionAvailable.Release();
-}
-
-void null_reply_func(struct ReplyAddress* /*addr*/, char* /*msg*/, int /*size*/)
-{
-}
-
-ReplyFunc SC_TcpInPort::GetReplyFunc()
-{
-	return null_reply_func;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-SC_TcpConnectionPort::SC_TcpConnectionPort(struct World *inWorld, SC_TcpInPort *inParent, int inSocket)
-    : SC_ComPort(inWorld, 0), mParent(inParent)
-{
-    mSocket = inSocket;
-
-#ifdef _WIN32
-	const char on = 1;
-	setsockopt( mSocket, IPPROTO_TCP, TCP_NODELAY, (const char*)&on, sizeof(on));
-#else
-	const int on = 1;
-	setsockopt( mSocket, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-#endif
-
-    Start();
-}
-
-SC_TcpConnectionPort::~SC_TcpConnectionPort()
-{
-#ifdef _WIN32
-	closesocket(mSocket);
-#else
-	close(mSocket);
-#endif
-    mParent->ConnectionTerminated();
-}
-
-void tcp_reply_func(struct ReplyAddress *addr, char* msg, int size);
-void tcp_reply_func(struct ReplyAddress *addr, char* msg, int size)
-{
-    uint32 u ;
-    // Write size as 32bit unsigned network-order integer
-	u = size;
-    u = htonl ( u ) ;
-    sendall ( addr->mSocket , &u , 4 ) ;
-    // Write message.
-    sendall ( addr->mSocket , msg , size ) ;
-}
-
-
-ReplyFunc SC_TcpConnectionPort::GetReplyFunc()
-{
-	return tcp_reply_func;
-}
-
-void* SC_TcpConnectionPort::Run()
-{
-	const int kMaxPasswordLen = 32;
-	char buf[kMaxPasswordLen];
-	OSC_Packet *packet = 0;
-	// wait for login message
-	int32 size;
-	int32 msglen;
-
-	// first message must be the password. 4 tries.
-	bool validated = mWorld->hw->mPassword[0] == 0;
-	for (int i=0; !validated && i<4; ++i) {
-		size = recvall(mSocket, &msglen, sizeof(int32) );
-		if (size < 0) goto leave;
-
-		msglen = ntohl(msglen);
-		if (msglen > kMaxPasswordLen) break;
-
-		size = recvall(mSocket, buf, msglen);
-		if (size < 0) goto leave;
-
-		validated = strcmp(buf, mWorld->hw->mPassword) == 0;
-#ifdef _WIN32
-		if (!validated) Sleep(i+1);	// thwart cracking.
-#else
-		if (!validated) sleep(i+1);	// thwart cracking.
-#endif
-	}
-
-	if (validated) {
-		while (true) {
-			if (!packet) {
-				packet = (OSC_Packet*)malloc(sizeof(OSC_Packet));
-			}
-			size = recvall(mSocket, &msglen, sizeof(int32));
-			if (size != sizeof(int32)) goto leave;
-
-			// sk: msglen is in network byte order
-			msglen = ntohl(msglen);
-
-			char *data = (char*)malloc(msglen);
-			size = recvall(mSocket, data, msglen);
-			if (size < msglen) goto leave;
-
-			if (mWorld->mDumpOSC) dumpOSC(mWorld->mDumpOSC, size, data);
-
-			packet->mReplyAddr.mReplyFunc = tcp_reply_func;
-			packet->mReplyAddr.mReplyData = 0;
-			packet->mSize = msglen;
-			packet->mData = data;
-			packet->mReplyAddr.mSocket = mSocket;
-			if (!ProcessOSCPacket(mWorld, packet)) {
-				scprintf("command FIFO full\n");
-				free(data);
-				free(packet);
-			}
-			packet = 0;
-		}
-	}
-leave:
-    delete this; // ohh this could cause a crash if a reply tries to access it..
-    return 0;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-int recvall(int socket, void *msg, size_t len)
-{
-	int total = 0;
-	while (total < (int)len)
-	{
-#ifdef _WIN32
-		int numbytes = recv(socket, (char*)msg, len - total, 0);
-#else
-		int numbytes = recv(socket, msg, len - total, 0);
-#endif
-		if (numbytes <= 0) return total;
-		total += numbytes;
-		msg = (void*)((char*)msg + numbytes);
-	}
-	return total;
-}
-
-int sendallto(int socket, const void *msg, size_t len, struct sockaddr *toaddr, int addrlen)
-{
-	int total = 0;
-	while (total < (int)len)
-	{
-#ifdef _WIN32
-		int numbytes = sendto(socket, (char*)msg, len - total, 0, toaddr, addrlen);
-#else
-		int numbytes = sendto(socket, msg, len - total, 0, toaddr, addrlen);
-#endif
-		if (numbytes < 0) {
-			scprintf("sendallto errno %d %s\n", errno, strerror(errno));
-			return total;
-		}
-		total += numbytes;
-		msg = (void*)((char*)msg + numbytes);
-	}
-	return total;
-}
-
-int sendall(int socket, const void *msg, size_t len)
-{
-	int total = 0;
-	while (total < (int)len)
-	{
-#ifdef _WIN32
-		int numbytes = send(socket, (const char*)msg, len - total, 0);
-#else
-		int numbytes = send(socket, msg, len - total, 0);
-#endif
-		if (numbytes < 0) return total;
-		total += numbytes;
-		msg = (void*)((char*)msg + numbytes);
-	}
-	return total;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if defined(__APPLE__) || defined(SC_IPHONE)
-
-SC_MachMessagePort::SC_MachMessagePort(struct World *inWorld, CFStringRef serverPortName, CFStringRef replyPortName)
-    :   SC_CmdPort(inWorld), mServerPort(NULL), mReplyPort(NULL)
-{
-    CFMessagePortContext context = { 0, this, NULL, NULL, NULL };
-    mServerPort = CFMessagePortCreateLocal(NULL, serverPortName, &messagePortCallBack, &context, NULL);
-    if (replyPortName) mReplyPort = CFMessagePortCreateRemote(NULL, replyPortName);
-    Start();
-}
-
-SC_MachMessagePort::~SC_MachMessagePort()
-{
-    if (mServerPort) {
-        CFMessagePortInvalidate(mServerPort);
-        CFRelease(mServerPort);
-    }
-    if (mReplyPort) {
-        CFMessagePortInvalidate(mReplyPort);
-        CFRelease(mReplyPort);
-    }
-}
-
-static void mach_reply_func(struct ReplyAddress * addr, char* msg, int size)
-{
-    CFMessagePortRef replyPort = (CFMessagePortRef) addr->mSocket;
-    CFDataRef data = CFDataCreateWithBytesNoCopy(NULL, (const UInt8*)msg, size, kCFAllocatorNull);
-    CFMessagePortSendRequest(replyPort, 0, data, 0, 0, NULL, NULL);
-    CFRelease(data);
-}
-
-ReplyFunc SC_MachMessagePort::GetReplyFunc()
-{
-	return mReplyPort ? mach_reply_func : null_reply_func;
-}
-
-void* SC_MachMessagePort::Run()
-{
-    CFRunLoopSourceRef source = CFMessagePortCreateRunLoopSource(NULL, mServerPort, 0);
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
-    CFRunLoopRun();
-    CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
-    CFRelease(source);
-    delete this;
-    return NULL;
-}
-
-CFDataRef SC_MachMessagePort::messagePortCallBack(CFMessagePortRef local, SInt32 msgid, CFDataRef data, void *info)
-{
-    // CFShow(data);
-    SC_MachMessagePort *port = (SC_MachMessagePort *) info;
-    OSC_Packet* packet = (OSC_Packet *) malloc(sizeof(OSC_Packet));
-    bzero(&packet->mReplyAddr, sizeof(ReplyAddress));
-    packet->mReplyAddr.mReplyFunc = port->mReplyPort ? mach_reply_func : null_reply_func;
-	packet->mReplyAddr.mReplyData = 0;
-    packet->mReplyAddr.mSocket = (int)(int64)port->mReplyPort;
-    packet->mSize = CFDataGetLength(data);
-    packet->mData = (char*) memcpy(malloc(packet->mSize), CFDataGetBytePtr(data), packet->mSize);
-
-    World *world = port->mWorld;
-    if (world->mDumpOSC) dumpOSC(world->mDumpOSC, packet->mSize, packet->mData);
-
-    if (!ProcessOSCPacket(world, packet)) {
-        scprintf("command FIFO full\n");
-        free(packet->mData);
-        free(packet);
-    }
-
-    // how can we send a reply? we could block here until the message is processed...
-    return NULL;
-}
-
-#endif

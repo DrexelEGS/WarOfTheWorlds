@@ -18,6 +18,8 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
+#ifndef SC_PLUGIN_H
+#define SC_PLUGIN_H
 
 #include "SC_World.h"
 #include "SC_Graph.h"
@@ -32,11 +34,8 @@
 #include "SC_DemandUnit.h"
 #include "clz.h"
 #include "sc_msg_iter.h"
-#include "SC_Altivec.h"
-#ifdef SC_IPHONE
-#include "SC_VFP11.h"
-#endif
 #include <stdlib.h>
+#include "SC_Alloca.h"
 
 #ifdef _WIN32
 
@@ -45,41 +44,17 @@
 #define __attribute__(x)
 #endif
 
-// workaround for IN/OUT conflict with Win32 headers. see SC_Unit.h for details
-#define IN SC_IN
-#define OUT SC_OUT
 
-#ifdef _MSC_VER
-#include <xmath.h>
-#endif //_MSC_VER
+#ifndef NAN  // NAN is c99
+#include <limits>
+#define NAN std::numeric_limits<float>::quiet_NaN()
+#endif
 
 // windows.h defines min() and max() macros which break things such as
 // std::numeric_limits<int32>::max() - so let's undefine them
 #undef max
 #undef min
 
-// we pull some standard math functions to the scope
-using std::floor;
-using std::ceil;
-using std::fabs;
-using std::pow;
-using std::exp;
-using std::log;
-
-using std::sin;
-using std::cos;
-using std::tan;
-using std::asin;
-using std::acos;
-using std::atan;
-using std::atan2;
-
-using std::sinh;
-using std::cosh;
-using std::tanh;
-using std::asinh;
-using std::acosh;
-using std::atanh;
-
-
 #endif
+
+#endif /* SC_PLUGIN_H */

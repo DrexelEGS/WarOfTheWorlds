@@ -14,10 +14,9 @@ struct AY : public Unit
 	size_t m_audiobufsize;
 };
 
-// declare unit generator functions 
+// declare unit generator functions
 extern "C"
 {
-	void load(InterfaceTable *inTable);
 	void AY_next(AY *unit, int inNumSamples);
 	void AY_Ctor(AY* unit);
 	void AY_Dtor(AY* unit);
@@ -30,33 +29,33 @@ void AY_Ctor(AY* unit)
 	SETCALC(AY_next);
 
 	// initialize the emulator etc.
-	
+
 	ayemu_chip_t chiptype = ((int) ZIN0(10)) == 1 ? AYEMU_YM : AYEMU_AY;
-	
+
 	// the emulator's output settings
 	int freq = SAMPLERATE;
 	int chans = 1;
 	int bits = 8;//16;
-	
+
 	// The audiobufsize is the number of bytes to store the 16-bit mono integer output for one control block.
 	int audiobufsize = BUFLENGTH * chans * (bits >> 3);
 	unsigned char * audiobuf = (unsigned char *) RTAlloc(unit->mWorld, audiobufsize);
-	
+
 	ayemu_ay_t * ay = (ayemu_ay_t *) RTAlloc(unit->mWorld, sizeof(ayemu_ay_t));
 	memset(ay, 0, sizeof(ayemu_ay_t));
-	
+
 	ayemu_init(ay);
-	
+
 	ayemu_set_chip_type(ay, chiptype, NULL);
 	//ayemu_set_chip_freq(ay, freq);
 	ayemu_set_sound_format(ay, freq, chans, bits);
-		
-	
-	
+
+
+
 	unit->m_audiobuf		= audiobuf;
 	unit->m_ay				= ay;
 	unit->m_audiobufsize	= audiobufsize;
-	
+
 	// calculate one sample of output.
 	AY_next(unit, 1);
 }
@@ -70,14 +69,14 @@ void AY_Dtor(AY* unit)
 void AY_next(AY *unit, int inNumSamples)
 {
 	unsigned char regs[14];
-	
+
 	float *out = OUT(0);
-	
+
 	// Retrieve state
 	ayemu_ay_t * ay	= unit->m_ay;
 	unsigned char * audiobuf	= unit->m_audiobuf;
 	size_t audiobufsize	= unit->m_audiobufsize;
-	
+
 	// The chip's inputs.
 	// The hard limits are applied here because the library wastes CPU
 	//  by outputting lots of warning messages if we exceed the limits.
@@ -91,7 +90,7 @@ void AY_next(AY *unit, int inNumSamples)
 	int volc		= sc_max(0, sc_min((int)ZIN0(7), 31));
 	int envfreq		= sc_max(0, sc_min((int)ZIN0(8), 4095));
 	int envstyle	= (int)ZIN0(9);
-	
+
 	// Translate the values into the raw registers
 	regs[0]  = (unsigned char)(tonea & 0xff);
 	regs[1]  = (unsigned char)(tonea >> 8);
@@ -107,18 +106,18 @@ void AY_next(AY *unit, int inNumSamples)
 	regs[11] = (unsigned char)(envfreq & 0xff);
 	regs[12] = (unsigned char)(envfreq >> 8);
 	regs[13] = (unsigned char)(envstyle);
-	
+
 //	Print("vola: %d\n", regs[8]);
 //	Print("volb: %d\n", regs[9]);
 //	Print("volc: %d\n", regs[10]);
-	
+
 	// Now let's pump that chip
 	ayemu_set_regs(ay, regs);
 	ayemu_gen_sound(ay, audiobuf, audiobufsize);
-	
+
 	//Print("AY:::    ay->Amp_Global is %d\n", ay->Amp_Global);
 
-	
+
 	// Convert the output from 16-bit to float, and write to output
 	int bufreadpos=0;
 	for (int i=0; i < BUFLENGTH; ++i)
@@ -132,7 +131,7 @@ void AY_next(AY *unit, int inNumSamples)
 
 ////////////////////////////////////////////////////////////////////
 
-void load(InterfaceTable *inTable)
+PluginLoad(AY)
 {
 	ft = inTable;
 

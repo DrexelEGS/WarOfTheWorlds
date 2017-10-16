@@ -28,6 +28,7 @@
 #include "SC_Prototypes.h"
 #include "SC_Str4.h"
 #include "SC_World.h"
+#include "SC_WorldOptions.h"
 #include "SC_Errors.h"
 #include "scsynthsend.h"
 
@@ -67,7 +68,7 @@ void Group_Calc(Group *inGroup)
 {
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+	Node *next = child->mNext;
 		(*child->mCalcFunc)(child);
 		child = next;
 	}
@@ -78,7 +79,7 @@ void Group_CalcTrace(Group *inGroup)
 	scprintf("TRACE Group %d\n", inGroup->mNode.mID);
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		scprintf("   %d %s\n", child->mID, (char*)child->mDef->mName);
 		(*child->mCalcFunc)(child);
 		child = next;
@@ -100,7 +101,7 @@ void Group_DumpNodeTree(Group *inGroup)
 	tabCount++;
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		for(int i = 0; i < tabCount; i ++) scprintf("   "); // small 'tabs'
 		scprintf("%d %s\n", child->mID, (char*)child->mDef->mName);
 		if (child->mIsGroup) {
@@ -119,7 +120,7 @@ void Group_DumpNodeTreeAndControls(Group *inGroup)
 	tabCount++;
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		int i;
 		for(i = 0; i < tabCount; i ++) scprintf("   "); // small 'tabs'
 		scprintf("%d %s", child->mID, (char*)child->mDef->mName); // def will be 'group' if it's a group
@@ -157,15 +158,15 @@ void Group_DumpNodeTreeAndControls(Group *inGroup)
 					}
 					// the ptr in nMapControls should be the same as the control itself, if not, it's mapped.
 					if((childGraph->mMapControls[i]) != ptr){
-					    int bus;
-					    if(childGraph->mControlRates[i] == 2){
-						bus = (childGraph->mMapControls[i]) - (child->mWorld->mAudioBus);
-						bus = (int)((float)bus / child->mWorld->mBufLength);
-						scprintf("a%d", bus);
-					    } else {
-						bus = (childGraph->mMapControls[i]) - (child->mWorld->mControlBus);
-						scprintf("c%d", bus);
-					    }
+						int bus;
+						if(childGraph->mControlRates[i] == 2){
+							bus = (childGraph->mMapControls[i]) - (child->mWorld->mAudioBus);
+							bus = (int)((float)bus / child->mWorld->mBufLength);
+							scprintf("a%d", bus);
+						} else {
+							bus = (childGraph->mMapControls[i]) - (child->mWorld->mControlBus);
+							scprintf("c%d", bus);
+						}
 						//scprintf("bus: %d\n", bus);
 					} else {
 						scprintf("%.14g", *ptr);
@@ -211,7 +212,7 @@ void Group_CountNodeTags(Group* inGroup, int* count)
 {
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		(*count)+= 2;
 		if (child->mIsGroup) {
 			Group_CountNodeTags((Group*)child, count);
@@ -225,7 +226,7 @@ void Group_CountNodeAndControlTags(Group* inGroup, int* count, int* controlAndDe
 {
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		(*count)++;
 		if (child->mIsGroup) {
 			Group_CountNodeAndControlTags((Group*)child, count, controlAndDefCount);
@@ -246,7 +247,7 @@ void Group_QueryTree(Group* inGroup, big_scpacket *packet)
 	int count = 0;
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		count++;
 		child = next;
 	}
@@ -258,7 +259,7 @@ void Group_QueryTree(Group* inGroup, big_scpacket *packet)
 	// id, numChildren, defname
 	child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		if (child->mIsGroup) {
 			Group_QueryTree((Group*)child, packet);
 		} else {
@@ -282,7 +283,7 @@ void Group_QueryTreeAndControls(Group* inGroup, big_scpacket *packet)
 	int count = 0;
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		count++;
 		child = next;
 	}
@@ -294,7 +295,7 @@ void Group_QueryTreeAndControls(Group* inGroup, big_scpacket *packet)
 	// id, numChildren, defname
 	child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		if (child->mIsGroup) {
 			Group_QueryTreeAndControls((Group*)child, packet);
 		} else {
@@ -339,10 +340,17 @@ void Group_QueryTreeAndControls(Group* inGroup, big_scpacket *packet)
 				// the ptr in nMapControls should be the same as the control itself, if not, it's mapped.
 				if((childGraph->mMapControls[i]) != ptr){
 					// it's mapped
-					int bus = (childGraph->mMapControls[i]) - (child->mWorld->mControlBus);
-					//scprintf("bus: %d\n", bus);
+					int bus;
 					char buf[10]; //should be long enough
-					sprintf(buf, "%c%d", 'c', bus);
+					if (childGraph->mControlRates[i] == 2) {
+					bus = (childGraph->mMapControls[i]) - (child->mWorld->mAudioBus);
+					bus = (int)((float)bus / child->mWorld->mBufLength);
+					sprintf(buf, "%c%d", 'a', bus);
+					} else {
+						bus = (childGraph->mMapControls[i]) - (child->mWorld->mControlBus);
+						sprintf(buf, "%c%d", 'c', bus);
+					}
+					//scprintf("bus: %d\n", bus);
 					packet->addtag('s');
 					packet->adds(buf);
 				} else {
@@ -360,9 +368,9 @@ void Group_DeleteAll(Group *inGroup)
 {
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
-        child->mPrev = child->mNext = 0;
-        child->mParent = 0;
+		Node *next = child->mNext;
+		child->mPrev = child->mNext = 0;
+		child->mParent = 0;
 		Node_Delete(child);
 		child = next;
 	}
@@ -373,7 +381,7 @@ void Group_DeepFreeGraphs(Group *inGroup)
 {
 	Node *child = inGroup->mHead;
 	while (child) {
-        Node *next = child->mNext;
+		Node *next = child->mNext;
 		if (child->mIsGroup) {
 			Group_DeepFreeGraphs((Group*)child);
 		} else {
@@ -443,22 +451,22 @@ void Group_MapControl(Group *inGroup, int32 inHash, int32 *inName, uint32 inInde
 
 void Group_MapAudioControl(Group *inGroup, uint32 inIndex, uint32 inBus)
 {
-    Node *child = inGroup->mHead;
-    while (child) {
-	Node *next = child->mNext;
-	Node_MapAudioControl(child, inIndex, inBus);
-	child = next;
-    }
+	Node *child = inGroup->mHead;
+	while (child) {
+		Node *next = child->mNext;
+		Node_MapAudioControl(child, inIndex, inBus);
+		child = next;
+	}
 }
 
 void Group_MapAudioControl(Group *inGroup, int32 inHash, int32 *inName, uint32 inIndex, uint32 inBus)
 {
-    Node *child = inGroup->mHead;
-    while (child) {
-	Node *next = child->mNext;
-	Node_MapAudioControl(child, inHash, inName, inIndex, inBus);
-	child = next;
-    }
+	Node *child = inGroup->mHead;
+	while (child) {
+		Node *next = child->mNext;
+		Node_MapAudioControl(child, inHash, inName, inIndex, inBus);
+		child = next;
+	}
 }
 void Group_SetControl(Group *inGroup, uint32 inIndex, float inValue)
 {

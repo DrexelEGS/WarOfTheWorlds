@@ -23,8 +23,8 @@
 #include "FFT_UGens.h"
 
 // We include vDSP even if not using for FFT, since we want to use some vectorised add/mul tricks
-#ifdef __APPLE__
-#include "vecLib/vDSP.h"
+#if defined(__APPLE__) && !defined(SC_IPHONE)
+#include <Accelerate/Accelerate.h>
 #endif
 
 struct FFTBase : public Unit
@@ -39,7 +39,6 @@ struct FFTBase : public Unit
 
 	scfft* m_scfft;
 
-	float *m_transformbuf;
 	int m_hopsize, m_shuntsize; // These add up to m_audiosize
 	int m_wintype;
 
@@ -145,20 +144,22 @@ static int FFTBase_Ctor(FFTBase *unit, int frmsizinput)
 
 void FFT_Ctor(FFT *unit)
 {
-	unit->m_wintype = (int)ZIN0(3); // wintype may be used by the base ctor
+	int winType = sc_clip((int)ZIN0(3), -1, 1); // wintype may be used by the base ctor
+	unit->m_wintype = winType;
 	if(!FFTBase_Ctor(unit, 5)){
 		SETCALC(FFT_ClearUnitOutputs);
 		// These zeroes are to prevent the dtor freeing things that don't exist:
 		unit->m_inbuf = 0;
-		unit->m_transformbuf = 0;
 		unit->m_scfft = 0;
 		return;
 	}
-	int fullbufsize = unit->m_fullbufsize * sizeof(float);
 	int audiosize = unit->m_audiosize * sizeof(float);
 
 	int hopsize = (int)(sc_max(sc_min(ZIN0(2), 1.f), 0.f) * unit->m_audiosize);
-	if (((int)(hopsize / unit->mWorld->mFullRate.mBufLength)) * unit->mWorld->mFullRate.mBufLength
+	if (hopsize < unit->mWorld->mFullRate.mBufLength) {
+		Print("FFT_Ctor: hopsize smaller than SC's block size (%i) - automatically corrected.\n", hopsize, unit->mWorld->mFullRate.mBufLength);
+		hopsize = unit->mWorld->mFullRate.mBufLength;
+	} else if (((int)(hopsize / unit->mWorld->mFullRate.mBufLength)) * unit->mWorld->mFullRate.mBufLength
 				!= hopsize) {
 		Print("FFT_Ctor: hopsize (%i) not an exact multiple of SC's block size (%i) - automatically corrected.\n", hopsize, unit->mWorld->mFullRate.mBufLength);
 		hopsize = ((int)(hopsize / unit->mWorld->mFullRate.mBufLength)) * unit->mWorld->mFullRate.mBufLength;
@@ -168,9 +169,14 @@ void FFT_Ctor(FFT *unit)
 
 	unit->m_inbuf = (float*)RTAlloc(unit->mWorld, audiosize);
 
-	unit->m_transformbuf = (float*)RTAlloc(unit->mWorld, scfft_trbufsize(unit->m_fullbufsize));
-	unit->m_scfft        = (scfft*)RTAlloc(unit->mWorld, sizeof(scfft));
-	scfft_create(unit->m_scfft, unit->m_fullbufsize, unit->m_audiosize, unit->m_wintype, unit->m_inbuf, unit->m_fftsndbuf->data, unit->m_transformbuf, true);
+	SCWorld_Allocator alloc(ft, unit->mWorld);
+	unit->m_scfft = scfft_create(unit->m_fullbufsize, unit->m_audiosize, (SCFFT_WindowFunction)unit->m_wintype, unit->m_inbuf,
+								 unit->m_fftsndbuf->data, kForward, alloc);
+
+	if (!unit->m_scfft) {
+		SETCALC(*ClearUnitOutputs);
+		return;
+	}
 
 	memset(unit->m_inbuf, 0, audiosize);
 
@@ -188,15 +194,12 @@ void FFT_Ctor(FFT *unit)
 
 void FFT_Dtor(FFT *unit)
 {
-	if(unit->m_scfft){
-		scfft_destroy(unit->m_scfft);
-		RTFree(unit->mWorld, unit->m_scfft);
-	}
+	SCWorld_Allocator alloc(ft, unit->mWorld);
+	if(unit->m_scfft)
+		scfft_destroy(unit->m_scfft, alloc);
 
 	if(unit->m_inbuf)
 		RTFree(unit->mWorld, unit->m_inbuf);
-	if(unit->m_transformbuf)
-		RTFree(unit->mWorld, unit->m_transformbuf);
 }
 
 // Ordinary ClearUnitOutputs outputs zero, potentially telling the IFFT (+ PV UGens) to act on buffer zero, so let's skip that:
@@ -210,7 +213,6 @@ void FFT_next(FFT *unit, int wrongNumSamples)
 	float *in = IN(1);
 	float *out = unit->m_inbuf + unit->m_pos + unit->m_shuntsize;
 
-// 	int numSamples = unit->mWorld->mFullRate.mBufLength;
 	int numSamples = unit->m_numSamples;
 
 	// copy input
@@ -235,19 +237,20 @@ void FFT_next(FFT *unit, int wrongNumSamples)
 			ZOUT0(0) = -1;
 		}
 		// Shunt input buf down
-		memcpy(unit->m_inbuf, unit->m_inbuf + unit->m_hopsize, unit->m_shuntsize * sizeof(float));
+		memmove(unit->m_inbuf, unit->m_inbuf + unit->m_hopsize, unit->m_shuntsize * sizeof(float));
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 void IFFT_Ctor(IFFT* unit){
-	unit->m_wintype = (int)ZIN0(1); // wintype may be used by the base ctor
+	int winType = sc_clip((int)ZIN0(1), -1, 1); // wintype may be used by the base ctor
+	unit->m_wintype = winType;
+
 	if(!FFTBase_Ctor(unit, 2)){
 		SETCALC(*ClearUnitOutputs);
 		// These zeroes are to prevent the dtor freeing things that don't exist:
 		unit->m_olabuf = 0;
-		unit->m_transformbuf = 0;
 		return;
 	}
 
@@ -255,9 +258,15 @@ void IFFT_Ctor(IFFT* unit){
 	unit->m_olabuf = (float*)RTAlloc(unit->mWorld, unit->m_audiosize * sizeof(float));
 	memset(unit->m_olabuf, 0, unit->m_audiosize * sizeof(float));
 
-	unit->m_transformbuf = (float*)RTAlloc(unit->mWorld, scfft_trbufsize(unit->m_fullbufsize));
-	unit->m_scfft        = (scfft*)RTAlloc(unit->mWorld, sizeof(scfft));
-	scfft_create(unit->m_scfft, unit->m_fullbufsize, unit->m_audiosize, unit->m_wintype, unit->m_fftsndbuf->data, unit->m_fftsndbuf->data, unit->m_transformbuf, false);
+	SCWorld_Allocator alloc(ft, unit->mWorld);
+	unit->m_scfft = scfft_create(unit->m_fullbufsize, unit->m_audiosize, (SCFFT_WindowFunction)unit->m_wintype, unit->m_fftsndbuf->data,
+								 unit->m_fftsndbuf->data, kBackward, alloc);
+
+	if (!unit->m_scfft) {
+		SETCALC(*ClearUnitOutputs);
+		unit->m_olabuf = 0;
+		return;
+	}
 
 	// "pos" will be reset to zero when each frame comes in. Until then, the following ensures silent output at first:
 	unit->m_pos = 0; //unit->m_audiosize;
@@ -269,19 +278,16 @@ void IFFT_Ctor(IFFT* unit){
 	}
 
 	SETCALC(IFFT_next);
-
 }
 
 void IFFT_Dtor(IFFT* unit)
 {
 	if(unit->m_olabuf)
 		RTFree(unit->mWorld, unit->m_olabuf);
-	if(unit->m_scfft){
-		scfft_destroy(unit->m_scfft);
-		RTFree(unit->mWorld, unit->m_scfft);
-	}
-	if(unit->m_transformbuf)
-		RTFree(unit->mWorld, unit->m_transformbuf);
+
+	SCWorld_Allocator alloc(ft, unit->mWorld);
+	if(unit->m_scfft)
+		scfft_destroy(unit->m_scfft, alloc);
 }
 
 void IFFT_next(IFFT *unit, int wrongNumSamples)
@@ -290,9 +296,8 @@ void IFFT_next(IFFT *unit, int wrongNumSamples)
 
 	// Load state from struct into local scope
 	int pos     = unit->m_pos;
-	int fullbufsize  = unit->m_fullbufsize;
 	int audiosize = unit->m_audiosize;
-// 	int numSamples = unit->mWorld->mFullRate.mBufLength;
+
 	int numSamples = unit->m_numSamples;
 	float *olabuf = unit->m_olabuf;
 	float fbufnum = ZIN0(0);
@@ -310,10 +315,10 @@ void IFFT_next(IFFT *unit, int wrongNumSamples)
 		int hopsamps = pos;
 		int shuntsamps = audiosize - hopsamps;
 		if(hopsamps != audiosize)  // There's only copying to be done if the position isn't all the way to the end of the buffer
-			memcpy(olabuf, olabuf+hopsamps, shuntsamps * sizeof(float));
+			memmove(olabuf, olabuf+hopsamps, shuntsamps * sizeof(float));
 
 		// Then mix the "new" time-domain data in - adding at first, then just setting (copying) where the "old" is supposed to be zero.
-		#ifdef __APPLE__
+		#if defined(__APPLE__) && !defined(SC_IPHONE)
 			vDSP_vadd(olabuf, 1, fftbuf, 1, olabuf, 1, shuntsamps);
 		#else
 			// NB we re-use the "pos" variable temporarily here for write rather than read
@@ -338,7 +343,6 @@ void IFFT_next(IFFT *unit, int wrongNumSamples)
 		pos += numSamples;
 	}
 	unit->m_pos = pos;
-
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -379,7 +383,6 @@ void FFTTrigger_Ctor(FFTTrigger *unit)
 
 	int numSamples = unit->mWorld->mFullRate.mBufLength;
 	float dataHopSize = IN0(1);
-	int initPolar = unit->m_polar = (int)IN0(2);
 	unit->m_numPeriods = unit->m_periodsRemain = (int)(((float)unit->m_fullbufsize * dataHopSize) / numSamples) - 1;
 
 	buf->coord = (IN0(2) == 1.f) ? coord_Polar : coord_Complex;
@@ -401,13 +404,9 @@ void FFTTrigger_next(FFTTrigger *unit, int inNumSamples)
 
 }
 
-void init_SCComplex(InterfaceTable *inTable);
-
 void initFFT(InterfaceTable *inTable)
 {
 	ft = inTable;
-
-	scfft_global_init();
 
 	DefineDtorUnit(FFT);
 	DefineDtorUnit(IFFT);

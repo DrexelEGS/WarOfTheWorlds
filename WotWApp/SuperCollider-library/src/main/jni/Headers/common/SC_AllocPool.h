@@ -32,6 +32,7 @@ Improved bit block scanning by using a count leading zeroes instruction.
 
 #include "SC_List.h"
 #include "clz.h"
+#include "function_attributes.h"
 #include <stdlib.h>
 
 const int kNumAllocBins = 128;
@@ -42,7 +43,7 @@ const int kMaxSmallBinSize = kNumSmallBins * kBinWidth;
 const int kBinBlockWidth = 4;
 const int kBinBlockMask = kBinBlockWidth - 1;
 
-const size_t kAlign = 16;
+const size_t kAlign = 64;
 const size_t kAlignMask = kAlign - 1;
 const size_t kChunkFree = 0;
 const size_t kChunkInUse = 1;
@@ -123,8 +124,7 @@ private:
 };
 
 const size_t kMinAllocSize = 2 * kAlign;
-// FIXME: add kAlign to overhead? <sk>
-const size_t kAreaOverhead = sizeof(AllocAreaHdr) + 2 * sizeof(AllocChunk);
+const size_t kAreaOverhead = sizeof(AllocAreaHdr) + 2 * sizeof(AllocChunk) + kAlign;
 
 typedef void* (*NewAreaFunc)(size_t size);
 typedef void (*FreeAreaFunc)(void *);
@@ -138,8 +138,8 @@ public:
 
 	void Reinit();
 
-	void *Alloc(size_t inBytes);
-	void *Realloc(void* inPtr, size_t inBytes);
+	MALLOC void *Alloc(size_t inBytes);
+	MALLOC void *Realloc(void* inPtr, size_t inBytes);
 	void Free(void* inPtr);
 	void FreeAll();
 	void FreeAllInternal();
@@ -178,10 +178,10 @@ private:
 		else return (sizePlusOverhead + kAlignMask) & ~kAlignMask;
 	}
 
-	static int SmallBinIndex(size_t inSize)
+	static size_t SmallBinIndex(size_t inSize)
 		{ return inSize >> 4; }
 
-	static int BinIndex2(size_t inSize)
+	static size_t BinIndex2(size_t inSize)
 	{
 		return
 		((inSize <   1024) ?       (inSize>>4):
@@ -195,7 +195,7 @@ private:
 		 (inSize < 262144) ? 112 + (inSize>>14):127);
 	}
 
-	static int BinIndex(size_t inSize)
+	static size_t BinIndex(size_t inSize)
 	{
 		if (inSize < 1024) return inSize >> 4;
 		if (inSize >= 262144) return 127;
@@ -203,19 +203,19 @@ private:
 		return (bits << 3) + (inSize >> bits) ;
 	}
 
-	void MarkBinBlock(int inIndex)
+	void MarkBinBlock(size_t inIndex)
 		{
-			unsigned long word = inIndex >> 5;
-			unsigned long bitPosition = inIndex & 31;
-			unsigned long bitValue = 1L << bitPosition;
+			size_t word = inIndex >> 5;
+			size_t bitPosition = inIndex & 31;
+			size_t bitValue = 1L << bitPosition;
 			mBinBlocks[word] |= bitValue;
 		}
 
-	void ClearBinBlock(int inIndex)
+	void ClearBinBlock(size_t inIndex)
 		{
-			unsigned long word = inIndex >> 5;
-			unsigned long bitPosition = inIndex & 31;
-			unsigned long bitValue = 1L << bitPosition;
+			size_t word = inIndex >> 5;
+			size_t bitPosition = inIndex & 31;
+			size_t bitValue = 1L << bitPosition;
 			mBinBlocks[word] &= ~bitValue;
 		}
 
@@ -262,7 +262,7 @@ private:
 		{
 			inChunk->RemoveLeaveDangling();
 			size_t size = inChunk->Size();
-			int index = BinIndex(size);
+			size_t index = BinIndex(size);
 			AllocChunkPtr bin = mBins + index;
 			if (bin->IsEmpty()) ClearBinBlock(index);
 		}

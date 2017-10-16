@@ -25,6 +25,11 @@
 #include "SC_PlugIn.h"
 #include <cstdio>
 
+#include <boost/align/is_aligned.hpp>
+
+using namespace std; // for math functions
+
+
 const int kMAXMEDIANSIZE = 32;
 
 static InterfaceTable *ft;
@@ -43,8 +48,8 @@ struct PlayBuf : public Unit
 	double m_phase;
 	float m_prevtrig;
 	float m_fbufnum;
+	float m_failedBufNum;
 	SndBuf *m_buf;
-	float **mOut;
 };
 
 
@@ -76,22 +81,20 @@ struct SimpleLoopBuf : public Unit
 	float m_prevtrig;
 	float m_fbufnum;
 	SndBuf *m_buf;
-	float **mOut;
 };
 #endif
 
 struct BufRd : public Unit
 {
 	float m_fbufnum;
+	float m_failedBufNum;
 	SndBuf *m_buf;
-	float **mOut;
 };
 
 struct BufWr : public Unit
 {
 	float m_fbufnum;
 	SndBuf *m_buf;
-	float **mIn;
 };
 
 struct RecordBuf : public Unit
@@ -117,57 +120,57 @@ struct Pitch : public Unit
 	bool m_getClarity;
 };
 
+struct InterpolationUnit
+{
+	static const int minDelaySamples = 1;
+};
+
+struct CubicInterpolationUnit
+{
+	static const int minDelaySamples = 2;
+};
+
 struct BufDelayUnit : public Unit
 {
 	float m_fbufnum;
 	SndBuf *m_buf;
 	float m_dsamp;
 	float m_delaytime;
-	int m_iwrphase;
+	long m_iwrphase;
 	uint32 m_numoutput;
 };
 
-struct BufDelayN : public BufDelayUnit
-{
-};
+struct BufDelayN : public BufDelayUnit, InterpolationUnit
+{};
 
-struct BufDelayL : public BufDelayUnit
-{
-};
+struct BufDelayL : public BufDelayUnit, InterpolationUnit
+{};
 
-struct BufDelayC : public BufDelayUnit
-{
-};
+struct BufDelayC : public BufDelayUnit, CubicInterpolationUnit
+{};
 
 struct BufFeedbackDelay : public BufDelayUnit
 {
 	float m_feedbk, m_decaytime;
 };
 
-struct BufCombN : public BufFeedbackDelay
-{
-};
+struct BufCombN : public BufFeedbackDelay, InterpolationUnit
+{};
 
-struct BufCombL : public BufFeedbackDelay
-{
-};
+struct BufCombL : public BufFeedbackDelay, InterpolationUnit
+{};
 
-struct BufCombC : public BufFeedbackDelay
-{
-};
+struct BufCombC : public BufFeedbackDelay, CubicInterpolationUnit
+{};
 
-struct BufAllpassN : public BufFeedbackDelay
-{
-};
+struct BufAllpassN : public BufFeedbackDelay, InterpolationUnit
+{};
 
-struct BufAllpassL : public BufFeedbackDelay
-{
-};
+struct BufAllpassL : public BufFeedbackDelay, InterpolationUnit
+{};
 
-struct BufAllpassC : public BufFeedbackDelay
-{
-};
-
+struct BufAllpassC : public BufFeedbackDelay, CubicInterpolationUnit
+{};
 
 struct DelayUnit : public Unit
 {
@@ -179,46 +182,37 @@ struct DelayUnit : public Unit
 	long m_numoutput;
 };
 
-struct DelayN : public DelayUnit
-{
-};
+struct DelayN : public DelayUnit, InterpolationUnit
+{};
 
-struct DelayL : public DelayUnit
-{
-};
+struct DelayL : public DelayUnit, InterpolationUnit
+{};
 
-struct DelayC : public DelayUnit
-{
-};
+struct DelayC : public DelayUnit, InterpolationUnit
+{};
 
 struct FeedbackDelay : public DelayUnit
 {
 	float m_feedbk, m_decaytime;
 };
 
-struct CombN : public FeedbackDelay
-{
-};
+struct CombN : public FeedbackDelay, InterpolationUnit
+{};
 
-struct CombL : public FeedbackDelay
-{
-};
+struct CombL : public FeedbackDelay, InterpolationUnit
+{};
 
-struct CombC : public FeedbackDelay
-{
-};
+struct CombC : public FeedbackDelay, CubicInterpolationUnit
+{};
 
-struct AllpassN : public FeedbackDelay
-{
-};
+struct AllpassN : public FeedbackDelay, InterpolationUnit
+{};
 
-struct AllpassL : public FeedbackDelay
-{
-};
+struct AllpassL : public FeedbackDelay, InterpolationUnit
+{};
 
-struct AllpassC : public FeedbackDelay
-{
-};
+struct AllpassC : public FeedbackDelay, CubicInterpolationUnit
+{};
 
 struct BufInfoUnit : public Unit
 {
@@ -226,7 +220,7 @@ struct BufInfoUnit : public Unit
 	SndBuf *m_buf;
 };
 
-struct Pluck : public FeedbackDelay
+struct Pluck : public FeedbackDelay, CubicInterpolationUnit
 {
 	float m_lastsamp, m_prevtrig, m_coef;
 	long m_inputsamps;
@@ -234,8 +228,8 @@ struct Pluck : public FeedbackDelay
 
 struct LocalBuf : public Unit
 {
-	float m_fbufnum;
 	SndBuf *m_buf;
+	void * chunk;
 };
 
 struct MaxLocalBufs : public Unit
@@ -243,16 +237,10 @@ struct MaxLocalBufs : public Unit
 };
 
 struct SetBuf : public Unit
-{
-	float m_fbufnum;
-	SndBuf *m_buf;
-};
+{};
 
 struct ClearBuf : public Unit
-{
-	float m_fbufnum;
-	SndBuf *m_buf;
-};
+{};
 
 struct DelTapWr : public Unit
 {
@@ -272,7 +260,6 @@ struct DelTapRd : public Unit
 
 extern "C"
 {
-	void load(InterfaceTable *inTable);
 
 	void SampleRate_Ctor(Unit *unit, int inNumSamples);
 	void ControlRate_Ctor(Unit *unit, int inNumSamples);
@@ -285,6 +272,7 @@ extern "C"
 	void NumAudioBuses_Ctor(Unit *unit, int inNumSamples);
 	void NumControlBuses_Ctor(Unit *unit, int inNumSamples);
 	void NumBuffers_Ctor(Unit *unit, int inNumSamples);
+	void NodeID_Ctor(Unit *unit, int inNumSamples);
 	void NumRunningSynths_Ctor(Unit *unit, int inNumSamples);
 	void NumRunningSynths_next(Unit *unit, int inNumSamples);
 
@@ -311,7 +299,6 @@ extern "C"
 	void PlayBuf_next_ka(PlayBuf *unit, int inNumSamples);
 	void PlayBuf_next_kk(PlayBuf *unit, int inNumSamples);
 	void PlayBuf_Ctor(PlayBuf* unit);
-	void PlayBuf_Dtor(PlayBuf* unit);
 
 	void TGrains_next(TGrains *unit, int inNumSamples);
 	void TGrains_Ctor(TGrains* unit);
@@ -323,13 +310,11 @@ extern "C"
 #endif
 
 	void BufRd_Ctor(BufRd *unit);
-	void BufRd_Dtor(BufRd *unit);
 	void BufRd_next_4(BufRd *unit, int inNumSamples);
 	void BufRd_next_2(BufRd *unit, int inNumSamples);
 	void BufRd_next_1(BufRd *unit, int inNumSamples);
 
 	void BufWr_Ctor(BufWr *unit);
-	void BufWr_Dtor(BufWr *unit);
 	void BufWr_next(BufWr *unit, int inNumSamples);
 
 	void RecordBuf_Ctor(RecordBuf *unit);
@@ -343,14 +328,11 @@ extern "C"
 
 	void LocalBuf_Ctor(LocalBuf *unit);
 	void LocalBuf_Dtor(LocalBuf *unit);
-	void LocalBuf_next(LocalBuf *unit, int inNumSamples);
 
 	void MaxLocalBufs_Ctor(MaxLocalBufs *unit);
 
 	void SetBuf_Ctor(SetBuf *unit);
-	void SetBuf_next(SetBuf *unit, int inNumSamples);
 	void ClearBuf_Ctor(ClearBuf *unit);
-	void ClearBuf_next(ClearBuf *unit, int inNumSamples);
 
 	void BufDelayN_Ctor(BufDelayN *unit);
 	void BufDelayN_next(BufDelayN *unit, int inNumSamples);
@@ -519,6 +501,11 @@ void RadiansPerSample_Ctor(Unit *unit, int inNumSamples)
 	ZOUT0(0) = unit->mWorld->mFullRate.mRadiansPerSample;
 }
 
+void BlockSize_Ctor(Unit *unit, int inNumSamples)
+{
+	ZOUT0(0) = unit->mWorld->mFullRate.mBufLength;
+}
+
 void SubsampleOffset_Ctor(Unit *unit, int inNumSamples)
 {
 	ZOUT0(0) = unit->mParent->mSubsampleOffset;
@@ -550,6 +537,11 @@ void NumBuffers_Ctor(Unit *unit, int inNumSamples)
 	ZOUT0(0) = unit->mWorld->mNumSndBufs;
 }
 
+void NodeID_Ctor(Unit *unit, int inNumSamples)
+{
+	ZOUT0(0) = (float) unit->mParent->mNode.mID;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
 void NumRunningSynths_Ctor(Unit *unit, int inNumSamples)
@@ -564,7 +556,28 @@ void NumRunningSynths_next(Unit *unit, int inNumSamples)
 }
 
 
+
 //////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+#define CTOR_GET_BUF \
+	float fbufnum  = ZIN0(0); \
+	fbufnum = sc_max(0.f, fbufnum); \
+	uint32 bufnum = (int)fbufnum; \
+	World *world = unit->mWorld; \
+	SndBuf *buf; \
+	if (bufnum >= world->mNumSndBufs) { \
+		int localBufNum = bufnum - world->mNumSndBufs; \
+		Graph *parent = unit->mParent; \
+		if(localBufNum <= parent->localBufNum) { \
+			buf = parent->mLocalSndBufs + localBufNum; \
+		} else { \
+			bufnum = 0; \
+			buf = world->mSndBufs + bufnum; \
+		} \
+	} else { \
+		buf = world->mSndBufs + bufnum; \
+	}
 
 void BufSampleRate_next(BufInfoUnit *unit, int inNumSamples)
 {
@@ -575,8 +588,9 @@ void BufSampleRate_next(BufInfoUnit *unit, int inNumSamples)
 void BufSampleRate_Ctor(BufInfoUnit *unit, int inNumSamples)
 {
 	SETCALC(BufSampleRate_next);
-	unit->m_fbufnum = -1e9f;
-	SIMPLE_GET_BUF_SHARED
+	CTOR_GET_BUF
+	unit->m_fbufnum = fbufnum;
+	unit->m_buf = buf;
 	ZOUT0(0) = buf->samplerate;
 }
 
@@ -590,23 +604,25 @@ void BufFrames_next(BufInfoUnit *unit, int inNumSamples)
 void BufFrames_Ctor(BufInfoUnit *unit, int inNumSamples)
 {
 	SETCALC(BufFrames_next);
-	unit->m_fbufnum = -1.f;
-	SIMPLE_GET_BUF_SHARED
+	CTOR_GET_BUF
+	unit->m_fbufnum = fbufnum;
+	unit->m_buf = buf;
 	ZOUT0(0) = buf->frames;
 }
 
 
 void BufDur_next(BufInfoUnit *unit, int inNumSamples)
 {
-	SIMPLE_GET_BUF
+	SIMPLE_GET_BUF_SHARED
 	ZOUT0(0) = buf->frames * buf->sampledur;
 }
 
 void BufDur_Ctor(BufInfoUnit *unit, int inNumSamples)
 {
 	SETCALC(BufDur_next);
-	unit->m_fbufnum = -1e9f;
-	SIMPLE_GET_BUF_SHARED
+	CTOR_GET_BUF
+	unit->m_fbufnum = fbufnum;
+	unit->m_buf = buf;
 	ZOUT0(0) = buf->frames * buf->sampledur;
 }
 
@@ -620,8 +636,9 @@ void BufChannels_next(BufInfoUnit *unit, int inNumSamples)
 void BufChannels_Ctor(BufInfoUnit *unit, int inNumSamples)
 {
 	SETCALC(BufChannels_next);
-	unit->m_fbufnum = -1e9f;
-	SIMPLE_GET_BUF_SHARED
+	CTOR_GET_BUF
+	unit->m_fbufnum = fbufnum;
+	unit->m_buf = buf;
 	ZOUT0(0) = buf->channels;
 }
 
@@ -635,8 +652,9 @@ void BufSamples_next(BufInfoUnit *unit, int inNumSamples)
 void BufSamples_Ctor(BufInfoUnit *unit, int inNumSamples)
 {
 	SETCALC(BufSamples_next);
-	unit->m_fbufnum = -1e9f;
-	SIMPLE_GET_BUF_SHARED
+	CTOR_GET_BUF
+	unit->m_fbufnum = fbufnum;
+	unit->m_buf = buf;
 	ZOUT0(0) = buf->samples;
 }
 
@@ -650,8 +668,9 @@ void BufRateScale_next(BufInfoUnit *unit, int inNumSamples)
 void BufRateScale_Ctor(BufInfoUnit *unit, int inNumSamples)
 {
 	SETCALC(BufRateScale_next);
-	unit->m_fbufnum = -1e9f;
-	SIMPLE_GET_BUF_SHARED
+	CTOR_GET_BUF
+	unit->m_fbufnum = fbufnum;
+	unit->m_buf = buf;
 	ZOUT0(0) = buf->samplerate * unit->mWorld->mFullRate.mSampleDur;
 }
 
@@ -662,19 +681,21 @@ inline int32 BUFMASK(int32 x)
 	return (1 << (31 - CLZ(x))) - 1;
 }
 
-
 static void LocalBuf_allocBuffer(LocalBuf *unit, SndBuf *buf, int numChannels, int numFrames)
 {
 	int numSamples = numFrames * numChannels;
 	// Print("bufnum: %i, allocating %i channels and %i frames. memsize: %i\n", (int)unit->m_fbufnum, numChannels, numFrames, numSamples * sizeof(float));
-	buf->data = (float*)RTAlloc(unit->mWorld, numSamples * sizeof(float));
+	const int alignment = 128; // in bytes
+	unit->chunk = (float*)RTAlloc(unit->mWorld, numSamples * sizeof(float) + alignment);
 
-	if (!buf->data) {
+	if (!unit->chunk) {
 		if(unit->mWorld->mVerbosity > -2){
 			Print("failed to allocate memory for LocalBuffer\n");
 		}
 		return;
 	}
+
+	buf->data = (float*) ((intptr_t)((char*)unit->chunk + (alignment - 1)) & -alignment);
 
 	buf->channels = numChannels;
 	buf->frames   = numFrames;
@@ -683,10 +704,10 @@ static void LocalBuf_allocBuffer(LocalBuf *unit, SndBuf *buf, int numChannels, i
 	buf->mask1    = buf->mask - 1;	// for oscillators
 	buf->samplerate = unit->mWorld->mSampleRate;
 	buf->sampledur = 1. / buf->samplerate;
+#if SUPERNOVA
+	buf->isLocal  = true;
+#endif
 }
-
-
-
 
 void LocalBuf_Ctor(LocalBuf *unit)
 {
@@ -694,41 +715,34 @@ void LocalBuf_Ctor(LocalBuf *unit)
 
 	int offset =  unit->mWorld->mNumSndBufs;
 	int bufnum =  parent->localBufNum;
+	float fbufnum;
 
 	if (parent->localBufNum >= parent->localMaxBufNum) {
-		unit->m_fbufnum = -1.f;
-		if(unit->mWorld->mVerbosity > -2){
+		fbufnum = -1.f;
+		if(unit->mWorld->mVerbosity > -2)
 			printf("warning: LocalBuf tried to allocate too many local buffers.\n");
-		}
-
 	} else {
-
-		unit->m_fbufnum = (float) (bufnum + offset);
+		fbufnum = (float) (bufnum + offset);
 		unit->m_buf =  parent->mLocalSndBufs + bufnum;
 		parent->localBufNum = parent->localBufNum + 1;
 
 		LocalBuf_allocBuffer(unit, unit->m_buf, (int)IN0(0), (int)IN0(1));
 	}
 
-	OUT0(0) = unit->m_fbufnum;
-
+	OUT0(0) = fbufnum;
 }
 
 void LocalBuf_Dtor(LocalBuf *unit)
 {
-	RTFree(unit->mWorld, unit->m_buf->data);
+	RTFree(unit->mWorld, unit->chunk);
 	if(unit->mParent->localBufNum <= 1) { // only the last time.
 		for (int i = 0; i != unit->mParent->localMaxBufNum; ++i)
 			unit->mParent->mLocalSndBufs[i].~SndBuf();
 		RTFree(unit->mWorld, unit->mParent->mLocalSndBufs);
 		unit->mParent->localMaxBufNum = 0;
-	} else {
-		unit->mParent->localBufNum =  unit->mParent->localBufNum - 1;
-	}
+	} else
+		unit->mParent->localBufNum = unit->mParent->localBufNum - 1;
 }
-
-// dummy for unit size.
-void LocalBuf_next(LocalBuf *unit, int inNumSamples) {}
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -737,8 +751,6 @@ void MaxLocalBufs_Ctor(MaxLocalBufs *unit)
 {
 	Graph *parent = unit->mParent;
 
-	int offset =  unit->mWorld->mNumSndBufs;
-	int bufnum =  parent->localBufNum;
 	int maxBufNum = (int)(IN0(0) + .5f);
 	if(!parent->localMaxBufNum) {
 		parent->mLocalSndBufs = (SndBuf*)RTAlloc(unit->mWorld, maxBufNum * sizeof(SndBuf));
@@ -747,19 +759,17 @@ void MaxLocalBufs_Ctor(MaxLocalBufs *unit)
 			new(&parent->mLocalSndBufs[i]) SndBuf();
 #endif
 		parent->localMaxBufNum = maxBufNum;
-	} else {
+	} else
 		printf("warning: MaxLocalBufs - maximum number of local buffers is already declared (%i) and must remain unchanged.\n", parent->localMaxBufNum);
-	}
-
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-void SetBuf_next(SetBuf *unit, int inNumSamples)
+void SetBuf_Ctor(SetBuf *unit)
 {
-	GET_BUF
-	if (!bufData) {
+	OUT0(0) = 0.f;
+	CTOR_GET_BUF
+	if (!buf || !buf->data) {
 		if(unit->mWorld->mVerbosity > -2){
 			Print("SetBuf: no valid buffer\n");
 		}
@@ -772,46 +782,26 @@ void SetBuf_next(SetBuf *unit, int inNumSamples)
 
 	int j = 3;
 	for(int i=offset; i<end; ++j, ++i) {
-		bufData[i] = (float)IN0(j);
+		buf->data[i] = IN0(j);
 	}
-
-}
-
-void SetBuf_Ctor(SetBuf *unit)
-{
-	unit->m_fbufnum = -1.f;
-	SETCALC(SetBuf_next);
-	OUT0(0) = 0.f;
-	SetBuf_next(unit, 0);
 }
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-void ClearBuf_next(ClearBuf *unit, int inNumSamples)
+void ClearBuf_Ctor(ClearBuf *unit)
 {
-	GET_BUF
-	if (!bufData) {
+	OUT0(0) = 0.f;
+	CTOR_GET_BUF
+
+	if (!buf || !buf->data) {
 		if(unit->mWorld->mVerbosity > -2){
 			Print("ClearBuf: no valid buffer\n");
 		}
 		return;
 	}
-	int n = unit->m_buf->samples;
 
-	//bzero(unit->m_buf->data, unit->m_buf->samples * sizeof(float));
-	for (int i=0; i<n; ++i) {
-		bufData[i] = 0.f;
-	}
-}
-
-void ClearBuf_Ctor(ClearBuf *unit)
-{
-	unit->m_fbufnum = -1.f;
-	SETCALC(ClearBuf_next);
-	OUT0(0) = 0.f;
-	ClearBuf_next(unit, 0);
+	Clear(buf->samples, buf->data);
 }
 
 
@@ -846,28 +836,26 @@ inline double sc_loop(Unit *unit, double in, double hi, int loop)
 		return; \
 	}
 
-#define SETUP_OUT \
-	uint32 numOutputs = unit->mNumOutputs; \
-	if (numOutputs > bufChannels) { \
-		if(unit->mWorld->mVerbosity > -1 && !unit->mDone){ \
-			Print("buffer-reading UGen channel mismatch: numOutputs %i, yet buffer has %i channels\n", numOutputs, bufChannels); \
-		} \
-                unit->mDone = true; \
-		ClearUnitOutputs(unit, inNumSamples); \
-		return; \
-	} \
-	if(!unit->mOut){ \
-		unit->mOut = (float**)RTAlloc(unit->mWorld, numOutputs * sizeof(float*)); \
-	} \
-	float **out = unit->mOut; \
-	for (uint32 i=0; i<numOutputs; ++i){ \
-		out[i] = ZOUT(i); \
-	}
+static inline bool checkBuffer(Unit * unit, const float * bufData, uint32 bufChannels,
+							   uint32 expectedChannels, int inNumSamples)
+{
+	if (!bufData)
+		goto handle_failure;
 
-#define TAKEDOWN_OUT \
-	if(unit->mOut){ \
-		RTFree(unit->mWorld, unit->mOut); \
+	if (expectedChannels > bufChannels) {
+		if(unit->mWorld->mVerbosity > -1 && !unit->mDone)
+			Print("Buffer UGen channel mismatch: expected %i, yet buffer has %i channels\n",
+				  expectedChannels, bufChannels);
+		goto handle_failure;
 	}
+	return true;
+
+handle_failure:
+	unit->mDone = true;
+	ClearUnitOutputs(unit, inNumSamples);
+	return false;
+}
+
 
 #define SETUP_IN(offset) \
 	uint32 numInputs = unit->mNumInputs - (uint32)offset; \
@@ -875,12 +863,17 @@ inline double sc_loop(Unit *unit, double in, double hi, int loop)
 		if(unit->mWorld->mVerbosity > -1 && !unit->mDone){ \
 			Print("buffer-writing UGen channel mismatch: numInputs %i, yet buffer has %i channels\n", numInputs, bufChannels); \
 		} \
-                unit->mDone = true; \
+		unit->mDone = true; \
 		ClearUnitOutputs(unit, inNumSamples); \
 		return; \
 	} \
 	if(!unit->mIn){ \
 		unit->mIn = (float**)RTAlloc(unit->mWorld, numInputs * sizeof(float*)); \
+		if (unit->mIn == NULL) { \
+			unit->mDone = true; \
+			ClearUnitOutputs(unit, inNumSamples); \
+			return; \
+		} \
 	} \
 	float **in = unit->mIn; \
 	for (uint32 i=0; i<numInputs; ++i) { \
@@ -892,8 +885,23 @@ inline double sc_loop(Unit *unit, double in, double hi, int loop)
 		RTFree(unit->mWorld, unit->mIn); \
 	}
 
+#define LOOP_INNER_BODY_1(SAMPLE_INDEX) \
+	OUT(channel)[SAMPLE_INDEX] = table1[index]; \
 
-#define LOOP_BODY_4 \
+#define LOOP_INNER_BODY_2(SAMPLE_INDEX) \
+	float b = table1[index]; \
+	float c = table2[index]; \
+	OUT(channel)[SAMPLE_INDEX] = b + fracphase * (c - b); \
+
+#define LOOP_INNER_BODY_4(SAMPLE_INDEX) \
+	float a = table0[index]; \
+	float b = table1[index]; \
+	float c = table2[index]; \
+	float d = table3[index]; \
+	OUT(channel)[SAMPLE_INDEX] = cubicinterp(fracphase, a, b, c, d); \
+
+
+#define LOOP_BODY_4(SAMPLE_INDEX) \
 		phase = sc_loop((Unit*)unit, phase, loopMax, loop); \
 		int32 iphase = (int32)phase; \
 		const float* table1 = bufData + iphase * bufChannels; \
@@ -925,16 +933,30 @@ inline double sc_loop(Unit *unit, double in, double hi, int loop)
 		} \
 		int32 index = 0; \
 		float fracphase = phase - (double)iphase; \
-		for (uint32 i=0; i<numOutputs; ++i) { \
-			float a = table0[index]; \
-			float b = table1[index]; \
-			float c = table2[index]; \
-			float d = table3[index]; \
-			*++(out[i]) = cubicinterp(fracphase, a, b, c, d); \
-			index++; \
-		}
+		if(numOutputs == bufChannels) { \
+			for (uint32 channel=0; channel<numOutputs; ++channel) { \
+				LOOP_INNER_BODY_4(SAMPLE_INDEX) \
+				index++; \
+			} \
+		} else if (numOutputs < bufChannels) { \
+			for (uint32 channel=0; channel<numOutputs; ++channel) { \
+				LOOP_INNER_BODY_4(SAMPLE_INDEX) \
+				index++; \
+			} \
+			index += (bufChannels - numOutputs); \
+		} else { \
+			for (uint32 channel=0; channel<bufChannels; ++channel) { \
+				LOOP_INNER_BODY_4(SAMPLE_INDEX) \
+				index++; \
+			} \
+			for (uint32 channel=bufChannels; channel<numOutputs; ++channel) { \
+				OUT(channel)[SAMPLE_INDEX] = 0.f; \
+				index++; \
+			} \
+		} \
 
-#define LOOP_BODY_2 \
+
+#define LOOP_BODY_2(SAMPLE_INDEX) \
 		phase = sc_loop((Unit*)unit, phase, loopMax, loop); \
 		int32 iphase = (int32)phase; \
 		const float* table1 = bufData + iphase * bufChannels; \
@@ -948,21 +970,76 @@ inline double sc_loop(Unit *unit, double in, double hi, int loop)
 		} \
 		int32 index = 0; \
 		float fracphase = phase - (double)iphase; \
-		for (uint32 i=0; i<numOutputs; ++i) { \
-			float b = table1[index]; \
-			float c = table2[index]; \
-			*++(out[i]) = b + fracphase * (c - b); \
-			index++; \
-		}
+		if(numOutputs == bufChannels) { \
+			for (uint32 channel=0; channel<numOutputs; ++channel) { \
+				LOOP_INNER_BODY_2(SAMPLE_INDEX) \
+				index++; \
+			} \
+		} else if (numOutputs < bufChannels) { \
+			for (uint32 channel=0; channel<numOutputs; ++channel) { \
+				LOOP_INNER_BODY_2(SAMPLE_INDEX) \
+				index++; \
+			} \
+			index += (bufChannels - numOutputs); \
+		} else { \
+			for (uint32 channel=0; channel<bufChannels; ++channel) { \
+				LOOP_INNER_BODY_2(SAMPLE_INDEX) \
+				index++; \
+			} \
+			for (uint32 channel=bufChannels; channel<numOutputs; ++channel) { \
+				OUT(channel)[SAMPLE_INDEX] = 0.f; \
+				index++; \
+			} \
+		} \
 
-#define LOOP_BODY_1 \
-        phase = sc_loop((Unit*)unit, phase, loopMax, loop); \
+
+#define LOOP_BODY_1(SAMPLE_INDEX) \
+		phase = sc_loop((Unit*)unit, phase, loopMax, loop); \
 		int32 iphase = (int32)phase; \
 		const float* table1 = bufData + iphase * bufChannels; \
 		int32 index = 0; \
-		for (uint32 i=0; i<numOutputs; ++i) { \
-			*++(out[i]) = table1[index++]; \
-		}
+		if(numOutputs == bufChannels) { \
+			for (uint32 channel=0; channel<numOutputs; ++channel) { \
+				LOOP_INNER_BODY_1(SAMPLE_INDEX) \
+				index++; \
+			} \
+		} else if (numOutputs < bufChannels) { \
+			for (uint32 channel=0; channel<numOutputs; ++channel) { \
+				LOOP_INNER_BODY_1(SAMPLE_INDEX) \
+				index++; \
+			} \
+			index += (bufChannels - numOutputs); \
+		} else { \
+			for (uint32 channel=0; channel<bufChannels; ++channel) { \
+				LOOP_INNER_BODY_1(SAMPLE_INDEX) \
+				index++; \
+			} \
+			for (uint32 channel=bufChannels; channel<numOutputs; ++channel) { \
+				OUT(channel)[SAMPLE_INDEX] = 0.f; \
+				index++; \
+			} \
+		} \
+
+
+
+#define CHECK_BUFFER_DATA \
+if (!bufData) { \
+	if(unit->mWorld->mVerbosity > -1 && !unit->mDone && (unit->m_failedBufNum != fbufnum)) { \
+		Print("Buffer UGen: no buffer data\n"); \
+		unit->m_failedBufNum = fbufnum; \
+	} \
+	ClearUnitOutputs(unit, inNumSamples); \
+	return; \
+} else { \
+	if (bufChannels != numOutputs) { \
+		if(unit->mWorld->mVerbosity > -1 && !unit->mDone && (unit->m_failedBufNum != fbufnum)) { \
+			Print("Buffer UGen channel mismatch: expected %i, yet buffer has %i channels\n", \
+				  numOutputs, bufChannels); \
+			unit->m_failedBufNum = fbufnum; \
+			} \
+		} \
+} \
+
 
 
 void PlayBuf_Ctor(PlayBuf *unit)
@@ -982,17 +1059,13 @@ void PlayBuf_Ctor(PlayBuf *unit)
 	}
 
 	unit->m_fbufnum = -1e9f;
+	unit->m_failedBufNum = -1e9f;
 	unit->m_prevtrig = 0.;
-	unit->mOut = 0;
 	unit->m_phase = ZIN0(3);
 
 	ClearUnitOutputs(unit, 1);
 }
 
-void PlayBuf_Dtor(PlayBuf *unit)
-{
-	TAKEDOWN_OUT
-}
 
 void PlayBuf_next_aa(PlayBuf *unit, int inNumSamples)
 {
@@ -1017,8 +1090,9 @@ void PlayBuf_next_aa(PlayBuf *unit, int inNumSamples)
 	int mask __attribute__((__unused__)) = buf->mask;
 	int guardFrame __attribute__((__unused__)) = bufFrames - 2;
 
-	CHECK_BUF
-	SETUP_OUT
+	int numOutputs = unit->mNumOutputs;
+
+	CHECK_BUFFER_DATA;
 
 	double loopMax = (double)(loop ? bufFrames : bufFrames - 1);
 	double phase = unit->m_phase;
@@ -1032,7 +1106,7 @@ void PlayBuf_next_aa(PlayBuf *unit, int inNumSamples)
 		}
 		prevtrig = trig;
 
-		LOOP_BODY_4
+		LOOP_BODY_4(i)
 
 		phase += ZXP(ratein);
 	}
@@ -1067,12 +1141,13 @@ void PlayBuf_next_ak(PlayBuf *unit, int inNumSamples)
 	int mask __attribute__((__unused__)) = buf->mask;
 	int guardFrame __attribute__((__unused__)) = bufFrames - 2;
 
-	CHECK_BUF
-	SETUP_OUT
+	int numOutputs = unit->mNumOutputs;
+
+	CHECK_BUFFER_DATA
 
 	double loopMax = (double)(loop ? bufFrames : bufFrames - 1);
 	double phase = unit->m_phase;
-    if(phase == -1.) phase = bufFrames;
+	if(phase == -1.) phase = bufFrames;
 	if (trig > 0.f && unit->m_prevtrig <= 0.f) {
 		unit->mDone = false;
 		phase = ZIN0(3);
@@ -1080,7 +1155,7 @@ void PlayBuf_next_ak(PlayBuf *unit, int inNumSamples)
 	unit->m_prevtrig = trig;
 	for (int i=0; i<inNumSamples; ++i) {
 
-		LOOP_BODY_4
+		LOOP_BODY_4(i)
 
 		phase += ZXP(ratein);
 	}
@@ -1097,8 +1172,9 @@ void PlayBuf_next_kk(PlayBuf *unit, int inNumSamples)
 	int32 loop     = (int32)ZIN0(4);
 
 	GET_BUF_SHARED
-	CHECK_BUF
-	SETUP_OUT
+	int numOutputs = unit->mNumOutputs;
+
+	CHECK_BUFFER_DATA
 
 	double loopMax = (double)(loop ? bufFrames : bufFrames - 1);
 	double phase = unit->m_phase;
@@ -1108,8 +1184,7 @@ void PlayBuf_next_kk(PlayBuf *unit, int inNumSamples)
 	}
 	unit->m_prevtrig = trig;
 	for (int i=0; i<inNumSamples; ++i) {
-
-		LOOP_BODY_4
+		LOOP_BODY_4(i)
 
 		phase += rate;
 	}
@@ -1125,8 +1200,9 @@ void PlayBuf_next_ka(PlayBuf *unit, int inNumSamples)
 	int32 loop     = (int32)ZIN0(4);
 
 	GET_BUF_SHARED
-	CHECK_BUF
-	SETUP_OUT
+	int numOutputs = unit->mNumOutputs;
+
+	CHECK_BUFFER_DATA
 
 	double loopMax = (double)(loop ? bufFrames : bufFrames - 1);
 	double phase = unit->m_phase;
@@ -1140,7 +1216,7 @@ void PlayBuf_next_ka(PlayBuf *unit, int inNumSamples)
 		}
 		prevtrig = trig;
 
-		LOOP_BODY_4
+		LOOP_BODY_4(i)
 
 		phase += rate;
 	}
@@ -1163,14 +1239,9 @@ void BufRd_Ctor(BufRd *unit)
 	}
 
 	unit->m_fbufnum = -1e9f;
-	unit->mOut = 0;
+	unit->m_failedBufNum = -1e9f;
 
-	ClearUnitOutputs(unit, 1);
-}
-
-void BufRd_Dtor(BufRd *unit)
-{
-	TAKEDOWN_OUT
+	BufRd_next_1(unit, 1);
 }
 
 void BufRd_next_4(BufRd *unit, int inNumSamples)
@@ -1179,16 +1250,15 @@ void BufRd_next_4(BufRd *unit, int inNumSamples)
 	int32 loop     = (int32)ZIN0(2);
 
 	GET_BUF_SHARED
-	CHECK_BUF
-	SETUP_OUT
+	uint32 numOutputs = unit->mNumOutputs;
+
+	CHECK_BUFFER_DATA
 
 	double loopMax = (double)(loop ? bufFrames : bufFrames - 1);
 
 	for (int i=0; i<inNumSamples; ++i) {
 		double phase = ZXP(phasein);
-
-		LOOP_BODY_4
-
+		LOOP_BODY_4(i)
 	}
 }
 
@@ -1198,16 +1268,15 @@ void BufRd_next_2(BufRd *unit, int inNumSamples)
 	int32 loop     = (int32)ZIN0(2);
 
 	GET_BUF_SHARED
-	CHECK_BUF
-	SETUP_OUT
+	uint32 numOutputs = unit->mNumOutputs;
+
+	CHECK_BUFFER_DATA
 
 	double loopMax = (double)(loop ? bufFrames : bufFrames - 1);
 
 	for (int i=0; i<inNumSamples; ++i) {
 		double phase = ZXP(phasein);
-
-		LOOP_BODY_2
-
+		LOOP_BODY_2(i)
 	}
 }
 
@@ -1217,16 +1286,15 @@ void BufRd_next_1(BufRd *unit, int inNumSamples)
 	int32 loop     = (int32)ZIN0(2);
 
 	GET_BUF_SHARED
-	CHECK_BUF
-	SETUP_OUT
+	uint32 numOutputs = unit->mNumOutputs;
+
+	CHECK_BUFFER_DATA
 
 	double loopMax = (double)(loop ? bufFrames : bufFrames - 1);
 
 	for (int i=0; i<inNumSamples; ++i) {
 		double phase = ZXP(phasein);
-
-		LOOP_BODY_1
-
+		LOOP_BODY_1(i)
 	}
 }
 
@@ -1237,14 +1305,8 @@ void BufWr_Ctor(BufWr *unit)
 	SETCALC(BufWr_next);
 
 	unit->m_fbufnum = -1e9f;
-	unit->mIn = 0;
 
 	ClearUnitOutputs(unit, 1);
-}
-
-void BufWr_Dtor(BufWr *unit)
-{
-	TAKEDOWN_IN
 }
 
 void BufWr_next(BufWr *unit, int inNumSamples)
@@ -1253,17 +1315,18 @@ void BufWr_next(BufWr *unit, int inNumSamples)
 	int32 loop     = (int32)ZIN0(2);
 
 	GET_BUF
-	CHECK_BUF
-	SETUP_IN(3)
+	uint32 numInputChannels = unit->mNumInputs - 3;
+	if (!checkBuffer(unit, bufData, bufChannels, numInputChannels, inNumSamples))
+		return;
+
 	double loopMax = (double)(bufFrames - (loop ? 0 : 1));
 
 	for (int32 k=0; k<inNumSamples; ++k) {
 		double phase = sc_loop((Unit*)unit, ZXP(phasein), loopMax, loop);
 		int32 iphase = (int32)phase;
 		float* table0 = bufData + iphase * bufChannels;
-		for (uint32 i=0; i<numInputs; ++i) {
-			table0[i] = *++(in[i]);
-		}
+		for (uint32 channel=0; channel<numInputChannels; ++channel)
+			table0[channel] = IN(channel+3)[k];
 	}
 }
 
@@ -1280,6 +1343,7 @@ void RecordBuf_Ctor(RecordBuf *unit)
 	unit->m_writepos = (int32)ZIN0(1) * numInputs;
 	unit->m_recLevel = ZIN0(2);
 	unit->m_preLevel = ZIN0(3);
+	unit->m_prevtrig = 0.f;
 
 	if (INRATE(2) == calc_ScalarRate && INRATE(3) == calc_ScalarRate
 		&& unit->m_recLevel == 1.0 && unit->m_preLevel == 0.0)
@@ -1407,7 +1471,7 @@ void RecordBuf_next(RecordBuf *unit, int inNumSamples)
 		}
 		if (run > 0.f) {
 			int nsmps = bufSamples - writepos;
-			nsmps = sc_clip(nsmps, 0, inNumSamples);
+			nsmps = sc_clip(nsmps, 0, inNumSamples * bufChannels);
 			if (bufChannels == 1) {
 				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
@@ -1418,6 +1482,7 @@ void RecordBuf_next(RecordBuf *unit, int inNumSamples)
 					preLevel += preLevel_slope;
 				}
 			} else if (bufChannels == 2 && numInputs == 2) {
+				nsmps = nsmps/2;
 				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					table0[0] = *++(in[0]) * recLevel + table0[0] * preLevel;
@@ -1428,6 +1493,7 @@ void RecordBuf_next(RecordBuf *unit, int inNumSamples)
 					preLevel += preLevel_slope;
 				}
 			} else {
+				nsmps = nsmps/bufChannels;
 				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					for (uint32 i=0; i<numInputs; ++i) {
@@ -1442,9 +1508,9 @@ void RecordBuf_next(RecordBuf *unit, int inNumSamples)
 			}
 		} else if (run < 0.f) {
 			int nsmps = writepos;
-			nsmps = sc_clip(nsmps, 0, inNumSamples);
+			nsmps = sc_clip(nsmps, 0, inNumSamples * bufChannels);
 			if (bufChannels == 1) {
-				for (int32 k=0; k<inNumSamples; ++k) {
+				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					table0[0] = *++(in[0]) * recLevel + table0[0] * preLevel;
 					writepos -= bufChannels;
@@ -1453,7 +1519,8 @@ void RecordBuf_next(RecordBuf *unit, int inNumSamples)
 					preLevel += preLevel_slope;
 				}
 			} else if (bufChannels == 2 && numInputs == 2) {
-				for (int32 k=0; k<inNumSamples; ++k) {
+				nsmps = nsmps/2;
+				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					table0[0] = *++(in[0]) * recLevel + table0[0] * preLevel;
 					table0[1] = *++(in[1]) * recLevel + table0[1] * preLevel;
@@ -1463,7 +1530,8 @@ void RecordBuf_next(RecordBuf *unit, int inNumSamples)
 					preLevel += preLevel_slope;
 				}
 			} else {
-				for (int32 k=0; k<inNumSamples; ++k) {
+				nsmps = nsmps/bufChannels;
+				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					for (uint32 i=0; i<numInputs; ++i) {
 						float *samp = table0 + i;
@@ -1570,7 +1638,7 @@ void RecordBuf_next_10(RecordBuf *unit, int inNumSamples)
 		}
 		if (run > 0.f) {
 			int nsmps = bufSamples - writepos;
-			nsmps = sc_clip(nsmps, 0, inNumSamples);
+			nsmps = sc_clip(nsmps, 0, inNumSamples * bufChannels);
 			if (bufChannels == 1) {
 				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
@@ -1578,14 +1646,15 @@ void RecordBuf_next_10(RecordBuf *unit, int inNumSamples)
 					writepos += 1;
 				}
 			} else if (bufChannels == 2) {
+				nsmps = nsmps/2;
 				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					table0[0] = *++(in[0]);
 					table0[1] = *++(in[1]);
 					writepos += 2;
-					if (writepos >= (int32)bufSamples) writepos = (int32)bufSamples - 2; // added by jrhb
 				}
 			} else {
+				nsmps = nsmps/bufChannels;
 				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					for (uint32 i=0; i<bufChannels; ++i) {
@@ -1593,27 +1662,28 @@ void RecordBuf_next_10(RecordBuf *unit, int inNumSamples)
 						*samp = *++(in[i]);
 					}
 					writepos += bufChannels;
-					if (writepos >= (int32)bufSamples) writepos = (int32)bufSamples - bufChannels; // added by jrhb
 				}
 			}
 		} else if (run < 0.f) {
 			int nsmps = writepos;
-			nsmps = sc_clip(nsmps, 0, inNumSamples);
+			nsmps = sc_clip(nsmps, 0, inNumSamples * bufChannels);
 			if (bufChannels == 1) {
-				for (int32 k=0; k<inNumSamples; ++k) {
+				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					table0[0] = *++(in[0]);
 					writepos -= 1;
 				}
 			} else if (bufChannels == 2) {
-				for (int32 k=0; k<inNumSamples; ++k) {
+				nsmps = nsmps/2;
+				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					table0[0] = *++(in[0]);
 					table0[1] = *++(in[1]);
 					writepos -= 2;
 				}
 			} else {
-				for (int32 k=0; k<inNumSamples; ++k) {
+				nsmps = nsmps/bufChannels;
+				for (int32 k=0; k<nsmps; ++k) {
 					float* table0 = bufData + writepos;
 					for (uint32 i=0; i<bufChannels; ++i) {
 						float *samp = table0 + i;
@@ -1623,6 +1693,7 @@ void RecordBuf_next_10(RecordBuf *unit, int inNumSamples)
 				}
 			}
 		}
+
 		if (writepos >= (int32)bufSamples){
 			unit->mDone = true;
 			DoneAction(IN0(7), unit);
@@ -1737,7 +1808,7 @@ void Pitch_Ctor(Pitch *unit)
 	unit->m_execPeriod = (int)(unit->m_srate / execfreq);
 	unit->m_execPeriod = sc_max(unit->m_execPeriod, unit->mWorld->mFullRate.mBufLength);
 
-	unit->m_size = unit->m_maxperiod << 1;
+	unit->m_size = sc_max(unit->m_maxperiod << 1, unit->m_execPeriod);
 
 	unit->m_buffer = (float*)RTAlloc(unit->mWorld, unit->m_size * sizeof(float));
 
@@ -2174,15 +2245,21 @@ void DelayUnit_AllocDelayLine(DelayUnit *unit)
 	int size = delaybufsize * sizeof(float);
 	//Print("->RTAlloc %d\n", size);
 	unit->m_dlybuf = (float*)RTAlloc(unit->mWorld, size);
-	//Print("<-RTAlloc %08X\n", unit->m_dlybuf);
+	//Print("<-RTAlloc %p\n", unit->m_dlybuf);
 	unit->m_mask = delaybufsize - 1;
 }
 #endif
 
-#define BufCalcDelay(delaytime) (sc_clip(delaytime * (float)SAMPLERATE, 1.f, \
-										 (float)(PREVIOUSPOWEROFTWO(bufSamples))-1))
 
-static void BufDelayUnit_Reset(BufDelayUnit *unit)
+template <typename Unit>
+static float BufCalcDelay(const Unit * unit, int bufSamples, float delayTime)
+{
+	float minDelay = Unit::minDelaySamples;
+	return sc_clip(delayTime * (float)SAMPLERATE, minDelay, (float)(PREVIOUSPOWEROFTWO(bufSamples))-1);
+}
+
+template <typename Unit>
+static void BufDelayUnit_Reset(Unit *unit)
 {
 	//Print("->DelayUnit_Reset\n");
 	//unit->m_maxdelaytime = ZIN0(1);
@@ -2195,14 +2272,15 @@ static void BufDelayUnit_Reset(BufDelayUnit *unit)
 	//Print("->GET_BUF\n");
 	GET_BUF
 	//Print("<-GET_BUF\n");
-	unit->m_dsamp = BufCalcDelay(unit->m_delaytime);
+	unit->m_dsamp = BufCalcDelay(unit, bufSamples, unit->m_delaytime);
 	unit->m_numoutput = 0;
 	unit->m_iwrphase = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void BufFeedbackDelay_Reset(BufFeedbackDelay *unit)
+template <typename Unit>
+static void BufFeedbackDelay_Reset(Unit *unit)
 {
 	BufDelayUnit_Reset(unit);
 
@@ -2262,6 +2340,89 @@ struct DelayN_helper<true>
 		perform(in, out, bufData, iwrphase, idsamp, mask);
 	}
 };
+
+template <bool initializing>
+static inline void DelayN_delay_loop(float * out, const float * in, long & iwrphase, float dsamp, long mask,
+									 float * dlybuf, int inNumSamples, int idelaylen)
+{
+	long irdphase = iwrphase - (long)dsamp;
+	float* dlybuf1 = dlybuf - ZOFF;
+	float* dlyrd   = dlybuf1 + (irdphase & mask);
+	float* dlywr   = dlybuf1 + (iwrphase & mask);
+	float* dlyN    = dlybuf1 + idelaylen;
+	long remain = inNumSamples;
+	while (remain) {
+		long rdspace = dlyN - dlyrd;
+		long wrspace = dlyN - dlywr;
+		if (initializing) {
+			long nsmps = sc_min(rdspace, wrspace);
+			nsmps = sc_min(remain, nsmps);
+			remain -= nsmps;
+			if (irdphase < 0) {
+				if ((dlywr - dlyrd) > nsmps) {
+#ifdef NOVA_SIMD
+					if ((nsmps & (nova::vec<float>::size - 1)) == 0) {
+						nova::copyvec_nn_simd(dlywr + ZOFF, in + ZOFF, nsmps);
+						nova::zerovec_na_simd(out + ZOFF, nsmps);
+					} else
+#endif
+					{
+						ZCopy(nsmps, dlywr, in);
+						ZClear(nsmps, out);
+					}
+					out += nsmps;
+					in += nsmps;
+					dlyrd += nsmps;
+					dlywr += nsmps;
+				} else {
+					LOOP(nsmps,
+						ZXP(dlywr) = ZXP(in);
+						ZXP(out) = 0.f;
+					);
+					dlyrd += nsmps;
+				}
+			} else {
+				LOOP(nsmps,
+					ZXP(dlywr) = ZXP(in);
+					ZXP(out) = ZXP(dlyrd);
+				);
+			}
+			irdphase += nsmps;
+			if (dlyrd == dlyN) dlyrd = dlybuf1;
+			if (dlywr == dlyN) dlywr = dlybuf1;
+		}
+		else {
+			long nsmps = sc_min(rdspace, wrspace);
+			nsmps = sc_min(remain, nsmps);
+			remain -= nsmps;
+
+			if (std::abs((float)(dlyrd - dlywr)) > nsmps) {
+#ifdef NOVA_SIMD
+				if ((nsmps & 15) == 0) {
+					nova::copyvec_nn_simd(dlywr + ZOFF, in + ZOFF, nsmps);
+					nova::copyvec_nn_simd(out + ZOFF, dlyrd + ZOFF, nsmps);
+				} else
+#endif
+				{
+					ZCopy(nsmps, dlywr, in);
+					ZCopy(nsmps, out, dlyrd);
+				}
+				out += nsmps;
+				in += nsmps;
+				dlyrd += nsmps;
+				dlywr += nsmps;
+			} else
+				LOOP(nsmps,
+					ZXP(dlywr) = ZXP(in);
+					ZXP(out) = ZXP(dlyrd);
+				);
+			if (dlyrd == dlyN) dlyrd = dlybuf1;
+			if (dlywr == dlyN) dlywr = dlybuf1;
+		}
+	}
+	iwrphase += inNumSamples;
+}
+
 
 template <bool Checked = false>
 struct DelayL_helper
@@ -2742,7 +2903,7 @@ inline void BufDelayX_perform(BufDelayX *unit, int inNumSamples, UnitCalcFunc re
 			PerformClass::perform(in, out, bufData, iwrphase, idsamp, frac, mask);
 		);
 	} else {
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		LOOP1(inNumSamples,
@@ -2780,7 +2941,7 @@ inline void BufDelayX_perform_a(BufDelayX *unit, int inNumSamples, UnitCalcFunc 
 	long iwrphase = unit->m_iwrphase;
 
 	LOOP1(inNumSamples,
-		float dsamp = BufCalcDelay(ZXP(delaytime));
+		float dsamp = BufCalcDelay(unit, bufSamples, ZXP(delaytime));
 		long idsamp = (long)dsamp;
 
 		float frac = dsamp - idsamp;
@@ -2821,28 +2982,9 @@ void BufDelayN_next(BufDelayN *unit, int inNumSamples)
 	float dsamp = unit->m_dsamp;
 
 	if (delaytime == unit->m_delaytime) {
-		long irdphase = iwrphase - (long)dsamp;
-		float* dlybuf1 = bufData - ZOFF;
-		float* dlyrd   = dlybuf1 + (irdphase & mask);
-		float* dlywr   = dlybuf1 + (iwrphase & mask);
-		float* dlyN    = dlybuf1 + PREVIOUSPOWEROFTWO(bufSamples);
-		long remain = inNumSamples;
-		while (remain) {
-			long rdspace = dlyN - dlyrd;
-			long wrspace = dlyN - dlywr;
-			long nsmps = sc_min(rdspace, wrspace);
-			nsmps = sc_min(remain, nsmps);
-			remain -= nsmps;
-			LOOP1(nsmps,
-				ZXP(dlywr) = ZXP(in);
-				ZXP(out) = ZXP(dlyrd);
-			);
-			if (dlyrd == dlyN) dlyrd = dlybuf1;
-			if (dlywr == dlyN) dlywr = dlybuf1;
-		}
-		iwrphase += inNumSamples;
+		DelayN_delay_loop<false>(out, in, iwrphase, dsamp, mask, bufData, inNumSamples, PREVIOUSPOWEROFTWO(bufSamples));
 	} else {
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		LOOP1(inNumSamples,
@@ -2870,35 +3012,9 @@ void BufDelayN_next_z(BufDelayN *unit, int inNumSamples)
 	float dsamp = unit->m_dsamp;
 
 	if (delaytime == unit->m_delaytime) {
-		long irdphase = iwrphase - (long)dsamp;
-		float* dlybuf1 = bufData - ZOFF;
-		float* dlyN    = dlybuf1 + PREVIOUSPOWEROFTWO(bufSamples);
-		long remain = inNumSamples;
-		while (remain) {
-			float* dlywr = dlybuf1 + (iwrphase & mask);
-			float* dlyrd = dlybuf1 + (irdphase & mask);
-			long rdspace = dlyN - dlyrd;
-			long wrspace = dlyN - dlywr;
-			long nsmps = sc_min(rdspace, wrspace);
-			nsmps = sc_min(remain, nsmps);
-			remain -= nsmps;
-			if (irdphase < 0) {
-				LOOP1(nsmps,
-					ZXP(dlywr) = ZXP(in);
-					ZXP(out) = 0.f;
-				);
-			} else {
-				LOOP1(nsmps,
-					ZXP(dlywr) = ZXP(in);
-					ZXP(out) = ZXP(dlyrd);
-				);
-			}
-			iwrphase += nsmps;
-			irdphase += nsmps;
-		}
+		DelayN_delay_loop<true>(out, in, iwrphase, dsamp, mask, bufData, inNumSamples, PREVIOUSPOWEROFTWO(bufSamples));
 	} else {
-
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		LOOP1(inNumSamples,
@@ -3049,7 +3165,7 @@ inline void BufFilterX_perform(BufCombX *unit, int inNumSamples, UnitCalcFunc re
 			PerformClass::perform(in, out, bufData, iwrphase, idsamp, frac, mask, feedbk);
 		);
 	} else {
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		float next_feedbk = sc_CalcFeedback(delaytime, decaytime);
@@ -3093,7 +3209,7 @@ inline void BufFilterX_perform_a(BufCombX *unit, int inNumSamples, UnitCalcFunc 
 
 	LOOP1(inNumSamples,
 		float del = ZXP(delaytime);
-		float dsamp = BufCalcDelay(del);
+		float dsamp = BufCalcDelay(unit, bufSamples, del);
 		float feedbk = sc_CalcFeedback(del, decaytime);
 
 		long idsamp = (long)dsamp;
@@ -3185,7 +3301,7 @@ void BufCombN_next(BufCombN *unit, int inNumSamples)
 		}
 		iwrphase += inNumSamples;
 	} else {
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		float next_feedbk = sc_CalcFeedback(delaytime, decaytime);
@@ -3282,8 +3398,7 @@ void BufCombN_next_z(BufCombN *unit, int inNumSamples)
 			unit->m_decaytime = decaytime;
 		}
 	} else {
-
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		float next_feedbk = sc_CalcFeedback(delaytime, decaytime);
@@ -3385,7 +3500,7 @@ void BufCombC_Ctor(BufCombC *unit)
 template <bool checked>
 inline void BufCombC_perform(BufCombC *unit, int inNumSamples)
 {
-	BufFilterX_perform<CombN_helper<checked> >(unit, inNumSamples, (UnitCalcFunc)BufCombC_next);
+	BufFilterX_perform<CombC_helper<checked> >(unit, inNumSamples, (UnitCalcFunc)BufCombC_next);
 }
 
 void BufCombC_next(BufCombC *unit, int inNumSamples)
@@ -3491,7 +3606,7 @@ void BufAllpassN_next(BufAllpassN *unit, int inNumSamples)
 		}
 		iwrphase += inNumSamples;
 	} else {
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		float next_feedbk = sc_CalcFeedback(delaytime, decaytime);
@@ -3595,7 +3710,7 @@ void BufAllpassN_next_z(BufAllpassN *unit, int inNumSamples)
 			unit->m_decaytime = decaytime;
 		}
 	} else {
-		float next_dsamp = BufCalcDelay(delaytime);
+		float next_dsamp = BufCalcDelay(unit, bufSamples, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
 
 		float next_feedbk = sc_CalcFeedback(delaytime, decaytime);
@@ -3732,36 +3847,56 @@ void BufAllpassC_next_a_z(BufAllpassC *unit, int inNumSamples)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void DelayUnit_AllocDelayLine(DelayUnit *unit)
+static bool DelayUnit_AllocDelayLine(DelayUnit *unit, const char * className)
 {
 	long delaybufsize = (long)ceil(unit->m_maxdelaytime * SAMPLERATE + 1.f);
 	delaybufsize = delaybufsize + BUFLENGTH;
 	delaybufsize = NEXTPOWEROFTWO(delaybufsize);  // round up to next power of two
 	unit->m_fdelaylen = unit->m_idelaylen = delaybufsize;
 
-	RTFree(unit->mWorld, unit->m_dlybuf);
+	if (unit->m_dlybuf)
+		RTFree(unit->mWorld, unit->m_dlybuf);
 	unit->m_dlybuf = (float*)RTAlloc(unit->mWorld, delaybufsize * sizeof(float));
+
+#if 0 // for debugging we may want to fill the buffer with nans
+	std::fill_n(unit->m_dlybuf, delaybufsize, std::numeric_limits<float>::signaling_NaN());
+#endif
+
+	if (unit->m_dlybuf == NULL) {
+		SETCALC(ft->fClearUnitOutputs);
+		ClearUnitOutputs(unit, 1);
+
+		if(unit->mWorld->mVerbosity > -2)
+			Print("Failed to allocate memory for %s ugen.\n", className);
+	}
+
 	unit->m_mask = delaybufsize - 1;
+	return (unit->m_dlybuf != NULL);
 }
 
-static float CalcDelay(DelayUnit *unit, float delaytime)
+template <typename Unit>
+static float CalcDelay(Unit *unit, float delaytime)
 {
+	float minDelay = Unit::minDelaySamples;
 	float next_dsamp = delaytime * (float)SAMPLERATE;
-	return sc_clip(next_dsamp, 1.f, unit->m_fdelaylen);
+	return sc_clip(next_dsamp, minDelay, unit->m_fdelaylen);
 }
 
-static void DelayUnit_Reset(DelayUnit *unit)
+template <typename Unit>
+static bool DelayUnit_Reset(Unit *unit, const char * className)
 {
 	unit->m_maxdelaytime = ZIN0(1);
 	unit->m_delaytime = ZIN0(2);
 	unit->m_dlybuf = 0;
 
-	DelayUnit_AllocDelayLine(unit);
+	if (!DelayUnit_AllocDelayLine(unit, className))
+		return false;
 
 	unit->m_dsamp = CalcDelay(unit, unit->m_delaytime);
 
 	unit->m_numoutput = 0;
 	unit->m_iwrphase = 0;
+	return true;
 }
 
 
@@ -3772,13 +3907,17 @@ void DelayUnit_Dtor(DelayUnit *unit)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void FeedbackDelay_Reset(FeedbackDelay *unit)
+template <typename Unit>
+static bool FeedbackDelay_Reset(Unit *unit, const char * className)
 {
 	unit->m_decaytime = ZIN0(3);
 
-	DelayUnit_Reset(unit);
+	bool allocationSucessful = DelayUnit_Reset(unit, className);
+	if (!allocationSucessful)
+		return false;
 
 	unit->m_feedbk = sc_CalcFeedback(unit->m_delaytime, unit->m_decaytime);
+	return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3862,10 +4001,68 @@ inline void DelayX_perform_a(DelayX *unit, int inNumSamples, UnitCalcFunc resetF
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+void Delay_next_0(DelayUnit *unit, int inNumSamples)
+{
+	float *out = OUT(0);
+	const float *in = IN(0);
+
+	memcpy(out, in, inNumSamples * sizeof(float));
+}
+
+void Delay_next_0_nop(DelayUnit *unit, int inNumSamples)
+{}
+
+#ifdef NOVA_SIMD
+void Delay_next_0_nova(DelayUnit *unit, int inNumSamples)
+{
+	nova::copyvec_simd(OUT(0), IN(0), inNumSamples);
+}
+#endif
+
+static bool DelayUnit_init_0(DelayUnit *unit)
+{
+	if (INRATE(2) == calc_ScalarRate && ZIN0(2) == 0) {
+		if (ZIN(0) == ZOUT(0))
+			SETCALC(Delay_next_0_nop);
+#ifdef NOVA_SIMD
+		else if (boost::alignment::is_aligned( BUFLENGTH, 16 ))
+			SETCALC(Delay_next_0_nova);
+#endif
+		else
+			SETCALC(Delay_next_0);
+
+		ZOUT0(0) = ZIN0(0);
+		return true;
+	} else
+		return false;
+}
+
+enum {
+	initializationComplete,
+	initializationIncomplete
+};
+
+template <typename Delay>
+static int Delay_Ctor(Delay *unit, const char *className)
+{
+	bool allocationSucessful = DelayUnit_Reset(unit, className);
+	if (!allocationSucessful)
+		return initializationComplete;
+
+	// optimize for a constant delay of zero
+	if (DelayUnit_init_0(unit))
+		return initializationComplete;
+	return initializationIncomplete;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void DelayN_Ctor(DelayN *unit)
 {
-	DelayUnit_Reset(unit);
-	if(INRATE(2) == calc_FullRate)
+	if (Delay_Ctor(unit, "DelayN") == initializationComplete)
+		return;
+
+	if (INRATE(2) == calc_FullRate)
 		SETCALC(DelayN_next_a_z);
 	else
 		SETCALC(DelayN_next_z);
@@ -3883,28 +4080,9 @@ void DelayN_next(DelayN *unit, int inNumSamples)
 	float dsamp = unit->m_dsamp;
 	long mask = unit->m_mask;
 
-	//Print("DelayN_next %08X %g %g  %d %d\n", unit, delaytime, dsamp, mask, iwrphase);
+	//Print("DelayN_next %p %g %g  %d %d\n", unit, delaytime, dsamp, mask, iwrphase);
 	if (delaytime == unit->m_delaytime) {
-		long irdphase = iwrphase - (long)dsamp;
-		float* dlybuf1 = dlybuf - ZOFF;
-		float* dlyrd   = dlybuf1 + (irdphase & mask);
-		float* dlywr   = dlybuf1 + (iwrphase & mask);
-		float* dlyN    = dlybuf1 + unit->m_idelaylen;
-		long remain = inNumSamples;
-		while (remain) {
-			long rdspace = dlyN - dlyrd;
-			long wrspace = dlyN - dlywr;
-			long nsmps = sc_min(rdspace, wrspace);
-			nsmps = sc_min(remain, nsmps);
-			remain -= nsmps;
-			LOOP(nsmps,
-				ZXP(dlywr) = ZXP(in);
-				ZXP(out) = ZXP(dlyrd);
-			);
-			if (dlyrd == dlyN) dlyrd = dlybuf1;
-			if (dlywr == dlyN) dlywr = dlybuf1;
-		}
-		iwrphase += inNumSamples;
+		DelayN_delay_loop<false>(out, in, iwrphase, dsamp, mask, dlybuf, inNumSamples, unit->m_idelaylen);
 	} else {
 		float next_dsamp = CalcDelay(unit, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
@@ -3933,32 +4111,7 @@ void DelayN_next_z(DelayN *unit, int inNumSamples)
 	long mask = unit->m_mask;
 
 	if (delaytime == unit->m_delaytime) {
-		long irdphase = iwrphase - (long)dsamp;
-		float* dlybuf1 = dlybuf - ZOFF;
-		float* dlyN    = dlybuf1 + unit->m_idelaylen;
-		long remain = inNumSamples;
-		while (remain) {
-			float* dlywr = dlybuf1 + (iwrphase & mask);
-			float* dlyrd = dlybuf1 + (irdphase & mask);
-			long rdspace = dlyN - dlyrd;
-			long wrspace = dlyN - dlywr;
-			long nsmps = sc_min(rdspace, wrspace);
-			nsmps = sc_min(remain, nsmps);
-			remain -= nsmps;
-			if (irdphase < 0) {
-				LOOP(nsmps,
-					ZXP(dlywr) = ZXP(in);
-					ZXP(out) = 0.f;
-				);
-			} else {
-				LOOP(nsmps,
-					ZXP(dlywr) = ZXP(in);
-					ZXP(out) = ZXP(dlyrd);
-				);
-			}
-			iwrphase += nsmps;
-			irdphase += nsmps;
-		}
+		DelayN_delay_loop<true>(out, in, iwrphase, dsamp, mask, dlybuf, inNumSamples, unit->m_idelaylen);
 	} else {
 		float next_dsamp = CalcDelay(unit, delaytime);
 		float dsamp_slope = CALCSLOPE(next_dsamp, dsamp);
@@ -3999,8 +4152,10 @@ void DelayN_next_a_z(DelayN *unit, int inNumSamples)
 
 void DelayL_Ctor(DelayL *unit)
 {
-	DelayUnit_Reset(unit);
-	if(INRATE(2) == calc_FullRate)
+	if (Delay_Ctor(unit, "DelayL") == initializationComplete)
+		return;
+
+	if (INRATE(2) == calc_FullRate)
 		SETCALC(DelayL_next_a_z);
 	else
 		SETCALC(DelayL_next_z);
@@ -4044,8 +4199,10 @@ void DelayL_next_a_z(DelayL *unit, int inNumSamples)
 
 void DelayC_Ctor(DelayC *unit)
 {
-	DelayUnit_Reset(unit);
-	if(INRATE(2) == calc_FullRate)
+	if (Delay_Ctor(unit, "DelayC") == initializationComplete)
+		return;
+
+	if (INRATE(2) == calc_FullRate)
 		SETCALC(DelayC_next_a_z);
 	else
 		SETCALC(DelayC_next_z);
@@ -4151,8 +4308,6 @@ inline void FilterX_perform_a(CombX *unit, int inNumSamples, UnitCalcFunc resetF
 
 	float *dlybuf = unit->m_dlybuf;
 	long iwrphase = unit->m_iwrphase;
-	float dsamp = unit->m_dsamp;
-	float feedbk = unit->m_feedbk;
 	long mask = unit->m_mask;
 
 	LOOP1(inNumSamples,
@@ -4179,7 +4334,10 @@ inline void FilterX_perform_a(CombX *unit, int inNumSamples, UnitCalcFunc resetF
 
 void CombN_Ctor(CombN *unit)
 {
-	FeedbackDelay_Reset(unit);
+	bool allocationSucessful = FeedbackDelay_Reset(unit, "CombN");
+	if (!allocationSucessful)
+		return;
+
 	if(INRATE(2) == calc_FullRate)
 		SETCALC(CombN_next_a_z);
 	else
@@ -4393,7 +4551,10 @@ void CombN_next_a_z(CombN *unit, int inNumSamples)
 
 void CombL_Ctor(CombL *unit)
 {
-	FeedbackDelay_Reset(unit);
+	bool allocationSucessful = FeedbackDelay_Reset(unit, "CombL");
+	if (!allocationSucessful)
+		return;
+
 	if(INRATE(2) == calc_FullRate)
 		SETCALC(CombL_next_a_z);
 	else
@@ -4437,7 +4598,10 @@ void CombL_next_a_z(CombL *unit, int inNumSamples)
 
 void CombC_Ctor(CombC *unit)
 {
-	FeedbackDelay_Reset(unit);
+	bool allocationSucessful = FeedbackDelay_Reset(unit, "CombC");
+	if (!allocationSucessful)
+		return;
+
 	if(INRATE(2) == calc_FullRate)
 		SETCALC(CombC_next_a_z);
 	else
@@ -4483,7 +4647,10 @@ void CombC_next_a_z(CombC *unit, int inNumSamples)
 
 void AllpassN_Ctor(AllpassN *unit)
 {
-	FeedbackDelay_Reset(unit);
+	bool allocationSucessful = FeedbackDelay_Reset(unit, "AllpassN");
+	if (!allocationSucessful)
+		return;
+
 	if(INRATE(2) == calc_FullRate)
 		SETCALC(AllpassN_next_a_z);
 	else
@@ -4704,7 +4871,10 @@ void AllpassN_next_a_z(AllpassN *unit, int inNumSamples)
 
 void AllpassL_Ctor(AllpassL *unit)
 {
-	FeedbackDelay_Reset(unit);
+	bool allocationSucessful = FeedbackDelay_Reset(unit, "AllpassL");
+	if (!allocationSucessful)
+		return;
+
 	if(INRATE(2) == calc_FullRate)
 		SETCALC(AllpassL_next_a_z);
 	else
@@ -4749,7 +4919,10 @@ void AllpassL_next_a_z(AllpassL *unit, int inNumSamples)
 
 void AllpassC_Ctor(AllpassC *unit)
 {
-	FeedbackDelay_Reset(unit);
+	bool allocationSucessful = FeedbackDelay_Reset(unit, "AllpassC");
+	if (!allocationSucessful)
+		return;
+
 	if(INRATE(2) == calc_FullRate)
 		SETCALC(AllpassC_next_a_z);
 	else
@@ -4815,8 +4988,11 @@ void SimpleLoopBuf_next_kk(SimpleLoopBuf *unit, int inNumSamples)
 	double loopstart  = (double)ZIN0(2);
 	double loopend    = (double)ZIN0(3);
 	GET_BUF
-	CHECK_BUF
-	SETUP_OUT
+
+	int numOutputs = unit->mNumOutputs;
+	if (!checkBuffer(unit, bufData, bufChannels, numOutputs, inNumSamples))
+		return;
+
 
 	loopend = sc_max(loopend, bufFrames);
 	int32 phase = unit->m_phase;
@@ -4826,13 +5002,12 @@ void SimpleLoopBuf_next_kk(SimpleLoopBuf *unit, int inNumSamples)
 	}
 	unit->m_prevtrig = trig;
 	for (int i=0; i<inNumSamples; ++i) {
-
 		phase = sc_loop1(phase, loopstart, loopend);
 		int32 iphase = (int32)phase;
 		float* table1 = bufData + iphase * bufChannels;
 		int32 index = 0;
-		for (uint32 i=0; i<bufChannels; ++i) {
-			*++(out[i]) = table1[index++];
+		for (uint32 channel=0; channel<bufChannels; ++channel) {
+			OUT(channel[i]) = table1[index++];
 		}
 
 		phase++;
@@ -4847,15 +5022,9 @@ void SimpleLoopBuf_Ctor(SimpleLoopBuf *unit)
 
 	unit->m_fbufnum = -1e9f;
 	unit->m_prevtrig = 0.;
-	unit->mOut = 0;
 	unit->m_phase = ZIN0(2);
 
 	ClearUnitOutputs(unit, 1);
-}
-
-void SimpleLoopBuf_Dtor(SimpleLoopBuf *unit)
-{
-	TAKEDOWN_OUT
 }
 #endif
 
@@ -4971,6 +5140,7 @@ void ScopeOut_next(ScopeOut *unit, int inNumSamples)
 
 void ScopeOut_Ctor(ScopeOut *unit)
 {
+
 	unit->m_fbufnum = -1e9;
 	unit->m_framepos = 0;
 	unit->m_framecount = 0;
@@ -4981,6 +5151,89 @@ void ScopeOut_Ctor(ScopeOut *unit)
 void ScopeOut_Dtor(ScopeOut *unit)
 {
 	TAKEDOWN_IN
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct ScopeOut2 : public Unit
+{
+	ScopeBufferHnd m_buffer;
+	float **m_inBuffers;
+	int m_maxPeriod;
+	uint32 m_phase;
+};
+
+
+void ScopeOut2_next(ScopeOut2 *unit, int inNumSamples)
+{
+	if( !unit->m_buffer ) return;
+
+	const int inputOffset = 3;
+	int numChannels = unit->mNumInputs - inputOffset;
+
+	uint32 period = (uint32)ZIN0(2);
+	uint32 framepos = unit->m_phase;
+
+	period = std::max((uint32)inNumSamples, std::min(unit->m_buffer.maxFrames, period));
+
+	if( framepos >= period ) framepos = 0;
+
+	int remain = period - framepos, wrap = 0;
+
+	if(inNumSamples <= remain)
+		remain = inNumSamples;
+	else
+		wrap = inNumSamples - remain;
+
+	for (int i = 0; i != numChannels; ++i) {
+		float * inBuf = unit->m_buffer.channel_data(i);
+		const float * in = IN(inputOffset + i);
+
+		memcpy(inBuf + framepos, in, remain * sizeof(float));
+	}
+
+	if(framepos + inNumSamples >= period)
+		(*ft->fPushScopeBuffer)(unit->mWorld, unit->m_buffer, period);
+
+	if (wrap) {
+		for (int i = 0; i != numChannels; ++i) {
+			float * inBuf = unit->m_buffer.channel_data(i);
+			const float * in = IN(inputOffset + i);
+			memcpy(inBuf, in + remain, wrap * sizeof(float));
+		}
+	}
+
+	framepos += inNumSamples;
+	if (framepos >= period)
+		framepos = wrap;
+
+	unit->m_phase = framepos;
+}
+
+void ScopeOut2_Ctor(ScopeOut2 *unit)
+{
+	uint32 numChannels = unit->mNumInputs - 3;
+	uint32 scopeNum = (uint32)ZIN0(0);
+	uint32 maxFrames = (uint32)ZIN0(1);
+
+	bool ok = (*ft->fGetScopeBuffer)(unit->mWorld, scopeNum, numChannels, maxFrames, unit->m_buffer);
+
+	if( !ok ) {
+		if( unit->mWorld->mVerbosity > -1 && !unit->mDone)
+			Print("ScopeOut2: Requested scope buffer unavailable! (index: %d, channels: %d, size: %d)\n",
+				  scopeNum, numChannels, maxFrames);
+	}
+	else {
+		unit->m_phase = 0;
+	}
+
+	SETCALC(ScopeOut2_next);
+}
+
+void ScopeOut2_Dtor(ScopeOut2 *unit)
+{
+	if( unit->m_buffer )
+		(*ft->fReleaseScopeBuffer)(unit->mWorld, unit->m_buffer);
 }
 
 
@@ -5685,7 +5938,7 @@ void GrainTap_next(GrainTap *unit, int inNumSamples)
 		if (unit->nextTime < 1) unit->nextTime = 1;
 
 		/*if (grain == NULL) {
-			postbuf("nextTime %d %g %g %08X %08X %08X\n", unit->nextTime, sdur, density,
+			postbuf("nextTime %d %g %g %p %p %p\n", unit->nextTime, sdur, density,
 				grain, unit->firstActive, unit->firstFree);
 		}*/
 	}
@@ -5739,14 +5992,24 @@ void GrainTap_Ctor(GrainTap *unit)
 
 
 #define GRAIN_BUF \
-	const SndBuf *buf = bufs + bufnum; \
-	LOCK_SNDBUF_SHARED(buf); \
-	const float *bufData __attribute__((__unused__)) = buf->data; \
-	uint32 bufChannels __attribute__((__unused__)) = buf->channels; \
-	uint32 bufSamples __attribute__((__unused__)) = buf->samples; \
-	uint32 bufFrames = buf->frames; \
-	int guardFrame __attribute__((__unused__)) = bufFrames - 2; \
-
+    const SndBuf *buf = NULL;                                           \
+    if (bufnum >= world->mNumSndBufs) {                                 \
+        int localBufNum = bufnum - numBufs;                             \
+        Graph *parent = unit->mParent;                                  \
+        if(localBufNum <= parent->localBufNum) {                        \
+            buf = parent->mLocalSndBufs + localBufNum;                  \
+        } else {                                                        \
+            continue;                                                   \
+        }                                                               \
+    } else {                                                            \
+        buf = bufs + bufnum;                                            \
+    }                                                                   \
+    LOCK_SNDBUF_SHARED(buf);                                            \
+    const float *bufData __attribute__((__unused__)) = buf->data;       \
+    uint32 bufChannels __attribute__((__unused__)) = buf->channels;     \
+    uint32 bufSamples __attribute__((__unused__)) = buf->samples;       \
+    uint32 bufFrames = buf->frames;                                     \
+    int guardFrame __attribute__((__unused__)) = bufFrames - 2;         \
 
 inline float IN_AT(Unit* unit, int index, int offset)
 {
@@ -5794,7 +6057,7 @@ inline double sc_gloop(double in, double hi)
 		float d = table3[0]; \
 		float outval = amp * cubicinterp(fracphase, a, b, c, d); \
 		ZXP(out1) += outval * pan1; \
-		ZXP(out2) += outval * pan2; \
+		if (numOutputs > 1) { ZXP(out2) += outval * pan2; } \
 		double y0 = b1 * y1 - y2; \
 		y2 = y1; \
 		y1 = y0; \
@@ -5814,7 +6077,7 @@ inline double sc_gloop(double in, double hi)
 		float c = table2[0]; \
 		float outval = amp * (b + fracphase * (c - b)); \
 		ZXP(out1) += outval * pan1; \
-		ZXP(out2) += outval * pan2; \
+		if (numOutputs > 1) { ZXP(out2) += outval * pan2; } \
 		double y0 = b1 * y1 - y2; \
 		y2 = y1; \
 		y1 = y0; \
@@ -5873,7 +6136,7 @@ void TGrains_next(TGrains *unit, int inNumSamples)
 
 		float *out1 = out[chan1];
 		float *out2 = out[chan2];
-		//printf("B chan %d %d  %08X %08X", chan1, chan2, out1, out2);
+		//printf("B chan %d %d  %p %p", chan1, chan2, out1, out2);
 
 		int nsmps = sc_min(grain->counter, inNumSamples);
 		if (grain->interp >= 4) {
@@ -5913,7 +6176,6 @@ void TGrains_next(TGrains *unit, int inNumSamples)
 			// start a grain
 			if (unit->mNumActive+1 >= kMaxGrains) break;
 			uint32 bufnum = (uint32)IN_AT(unit, 1, i);
-			if (bufnum >= numBufs) continue;
 			GRAIN_BUF
 
 			if (bufChannels != 1) continue;
@@ -5938,21 +6200,29 @@ void TGrains_next(TGrains *unit, int inNumSamples)
 			grain->interp = (int)IN_AT(unit, 7, i);
 
 			float panangle;
-			if (numOutputs > 2) {
-				pan = sc_wrap(pan * 0.5f, 0.f, 1.f);
-				float cpan = numOutputs * pan + 0.5;
-				float ipan = floor(cpan);
-				float panfrac = cpan - ipan;
-				panangle = panfrac * pi2_f;
-				grain->chan = (int)ipan;
-				if (grain->chan >= (int)numOutputs) grain->chan -= numOutputs;
+			float pan1, pan2;
+			if (numOutputs > 1) {
+				if (numOutputs > 2) {
+					pan = sc_wrap(pan * 0.5f, 0.f, 1.f);
+					float cpan = numOutputs * pan + 0.5f;
+					float ipan = floor(cpan);
+					float panfrac = cpan - ipan;
+					panangle = panfrac * pi2_f;
+					grain->chan = (int)ipan;
+					if (grain->chan >= (int)numOutputs)
+						grain->chan -= numOutputs;
+				} else {
+					grain->chan = 0;
+					pan = sc_clip(pan * 0.5f + 0.5f, 0.f, 1.f);
+					panangle = pan * pi2_f;
+				}
+				pan1 = grain->pan1 = cos(panangle);
+				pan2 = grain->pan2 = sin(panangle);
 			} else {
 				grain->chan = 0;
-				pan = sc_wrap(pan * 0.5f + 0.5f, 0.f, 1.f);
-				panangle = pan * pi2_f;
+				pan1 = grain->pan1 = 1.;
+				pan2 = grain->pan2 = 0.;
 			}
-			float pan1 = grain->pan1 = amp * cos(panangle);
-			float pan2 = grain->pan2 = amp * sin(panangle);
 			double w = pi / counter;
 			double b1 = grain->b1 = 2. * cos(w);
 			double y1 = sin(w);
@@ -6016,11 +6286,14 @@ Pluck - Karplus-Strong
 */
 void Pluck_Ctor(Pluck *unit)
 {
-//	FeedbackDelay_Reset(unit);
-	float maxdelaytime = unit->m_maxdelaytime = IN0(2);
-	float delaytime = unit->m_delaytime = IN0(3);
+	unit->m_maxdelaytime = IN0(2);
+	unit->m_delaytime = IN0(3);
+	unit->m_decaytime = IN0(4);
 	unit->m_dlybuf = 0;
-	DelayUnit_AllocDelayLine(unit);
+	bool allocationSucessful = DelayUnit_AllocDelayLine(unit, "Pluck");
+	if (!allocationSucessful)
+		return;
+
 	unit->m_dsamp = CalcDelay(unit, unit->m_delaytime);
 
 	unit->m_numoutput = 0;
@@ -6034,7 +6307,7 @@ void Pluck_Ctor(Pluck *unit)
 			SETCALC(Pluck_next_ak_z); //ak
 		}
 	} else {
-	    if(INRATE(5) == calc_FullRate){
+		if(INRATE(5) == calc_FullRate){
 			SETCALC(Pluck_next_ka_z); //ka
 		} else {
 			SETCALC(Pluck_next_kk_z); //kk
@@ -6068,22 +6341,22 @@ void Pluck_next_aa(Pluck *unit, int inNumSamples)
 	if (delaytime == unit->m_delaytime && decaytime == unit->m_decaytime) {
 		long idsamp = (long)dsamp;
 		float frac = dsamp - idsamp;
-	for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			long irdphase1 = iwrphase - idsamp;
 			long irdphase2 = irdphase1 - 1;
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6103,11 +6376,11 @@ void Pluck_next_aa(Pluck *unit, int inNumSamples)
 		float next_feedbk = sc_CalcFeedback(delaytime, decaytime);
 		float feedbk_slope = CALCSLOPE(next_feedbk, feedbk);
 
-	    for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			dsamp += dsamp_slope;
 			long idsamp = (long)dsamp;
@@ -6117,11 +6390,11 @@ void Pluck_next_aa(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6174,19 +6447,19 @@ void Pluck_next_aa_z(Pluck *unit, int inNumSamples)
 		for(int i = 0; i < inNumSamples; i++){
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			long irdphase1 = iwrphase - idsamp;
 			long irdphase2 = irdphase1 - 1;
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
@@ -6210,10 +6483,10 @@ void Pluck_next_aa_z(Pluck *unit, int inNumSamples)
 					d3 = dlybuf[irdphase3 & mask];
 				}
 				float value = cubicinterp(frac, d0, d1, d2, d3);
-			float thiscoef = coef[i];
-			float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
-			out[i] = lastsamp = onepole;
+				float thiscoef = coef[i];
+				float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
+				out[i] = lastsamp = onepole;
 			}
 			iwrphase++;
 		};
@@ -6228,8 +6501,8 @@ void Pluck_next_aa_z(Pluck *unit, int inNumSamples)
 		for(int i = 0; i < inNumSamples; i++) {
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			dsamp += dsamp_slope;
 			long idsamp = (long)dsamp;
@@ -6239,15 +6512,15 @@ void Pluck_next_aa_z(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
-			    } else {
+			} else {
 				if (irdphase1 < 0) {
 					d1 = d2 = d3 = 0.f;
 					d0 = dlybuf[irdphase0 & mask];
@@ -6267,10 +6540,10 @@ void Pluck_next_aa_z(Pluck *unit, int inNumSamples)
 					d3 = dlybuf[irdphase3 & mask];
 				}
 				float value = cubicinterp(frac, d0, d1, d2, d3);
-			float thiscoef = coef[i];
-			float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
-			out[i] = lastsamp = onepole;
+				float thiscoef = coef[i];
+				float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
+				out[i] = lastsamp = onepole;
 			}
 			feedbk += feedbk_slope;
 			iwrphase++;
@@ -6311,25 +6584,25 @@ void Pluck_next_kk(Pluck *unit, int inNumSamples)
 	float thisin;
 
 	if ((unit->m_prevtrig <= 0.f) && (trig > 0.f)) {
-	    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-	    }
+		inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+	}
 	unit->m_prevtrig = trig;
 
 	if (delaytime == unit->m_delaytime && decaytime == unit->m_decaytime && coef == unit->m_coef) {
 		long idsamp = (long)dsamp;
 		float frac = dsamp - idsamp;
 
-	    for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			long irdphase1 = iwrphase - idsamp;
 			long irdphase2 = irdphase1 - 1;
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6351,7 +6624,7 @@ void Pluck_next_kk(Pluck *unit, int inNumSamples)
 		float curcoef = unit->m_coef;
 		float coef_slope = CALCSLOPE(coef, curcoef);
 
-	    for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			dsamp += dsamp_slope;
 			long idsamp = (long)dsamp;
 			float frac = dsamp - idsamp;
@@ -6360,11 +6633,11 @@ void Pluck_next_kk(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6411,8 +6684,8 @@ void Pluck_next_kk_z(Pluck *unit, int inNumSamples)
 	unsigned long inputsamps = unit->m_inputsamps;
 
 	if ((unit->m_prevtrig <= 0.f) && (trig > 0.f)) {
-	    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-	    }
+		inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+	}
 	unit->m_prevtrig = trig;
 
 	if (delaytime == unit->m_delaytime && decaytime == unit->m_decaytime && coef == unit->m_coef) {
@@ -6425,11 +6698,11 @@ void Pluck_next_kk_z(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
@@ -6453,9 +6726,9 @@ void Pluck_next_kk_z(Pluck *unit, int inNumSamples)
 					d3 = dlybuf[irdphase3 & mask];
 				}
 				float value = cubicinterp(frac, d0, d1, d2, d3);
-			float onepole = ((1. - fabs(coef)) * value) + (coef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + (feedbk * onepole);
-			out[i] = lastsamp = onepole; //value;
+				float onepole = ((1. - fabs(coef)) * value) + (coef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + (feedbk * onepole);
+				out[i] = lastsamp = onepole; //value;
 			}
 			iwrphase++;
 		};
@@ -6479,15 +6752,15 @@ void Pluck_next_kk_z(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
-			    } else {
+			} else {
 				if (irdphase1 < 0) {
 					d1 = d2 = d3 = 0.f;
 					d0 = dlybuf[irdphase0 & mask];
@@ -6506,10 +6779,10 @@ void Pluck_next_kk_z(Pluck *unit, int inNumSamples)
 					d2 = dlybuf[irdphase2 & mask];
 					d3 = dlybuf[irdphase3 & mask];
 				}
-			float value = cubicinterp(frac, d0, d1, d2, d3);
-			float onepole = ((1. - fabs(curcoef)) * value) + (curcoef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + (feedbk * onepole);
-			out[i] = lastsamp = onepole; //value;
+				float value = cubicinterp(frac, d0, d1, d2, d3);
+				float onepole = ((1. - fabs(curcoef)) * value) + (curcoef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + (feedbk * onepole);
+				out[i] = lastsamp = onepole; //value;
 			}
 			feedbk += feedbk_slope;
 			curcoef += coef_slope;
@@ -6554,22 +6827,22 @@ void Pluck_next_ak(Pluck *unit, int inNumSamples)
 	if (delaytime == unit->m_delaytime && decaytime == unit->m_decaytime) {
 		long idsamp = (long)dsamp;
 		float frac = dsamp - idsamp;
-	for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			long irdphase1 = iwrphase - idsamp;
 			long irdphase2 = irdphase1 - 1;
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6591,11 +6864,11 @@ void Pluck_next_ak(Pluck *unit, int inNumSamples)
 		float curcoef = unit->m_coef;
 		float coef_slope = CALCSLOPE(coef, curcoef);
 
-	    for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			dsamp += dsamp_slope;
 			long idsamp = (long)dsamp;
@@ -6605,11 +6878,11 @@ void Pluck_next_ak(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6663,19 +6936,19 @@ void Pluck_next_ak_z(Pluck *unit, int inNumSamples)
 		for(int i = 0; i < inNumSamples; i++){
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			long irdphase1 = iwrphase - idsamp;
 			long irdphase2 = irdphase1 - 1;
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
@@ -6699,9 +6972,9 @@ void Pluck_next_ak_z(Pluck *unit, int inNumSamples)
 					d3 = dlybuf[irdphase3 & mask];
 				}
 				float value = cubicinterp(frac, d0, d1, d2, d3);
-			float onepole = ((1. - fabs(coef)) * value) + (coef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
-			out[i] = lastsamp = onepole;
+				float onepole = ((1. - fabs(coef)) * value) + (coef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
+				out[i] = lastsamp = onepole;
 			}
 			iwrphase++;
 		};
@@ -6719,8 +6992,8 @@ void Pluck_next_ak_z(Pluck *unit, int inNumSamples)
 		for(int i = 0; i < inNumSamples; i++) {
 			curtrig = trig[i];
 			if ((prevtrig <= 0.f) && (curtrig > 0.f)) {
-			    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-			    }
+				inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+			}
 			prevtrig = curtrig;
 			dsamp += dsamp_slope;
 			long idsamp = (long)dsamp;
@@ -6730,15 +7003,15 @@ void Pluck_next_ak_z(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
-			    } else {
+			} else {
 				if (irdphase1 < 0) {
 					d1 = d2 = d3 = 0.f;
 					d0 = dlybuf[irdphase0 & mask];
@@ -6758,9 +7031,9 @@ void Pluck_next_ak_z(Pluck *unit, int inNumSamples)
 					d3 = dlybuf[irdphase3 & mask];
 				}
 				float value = cubicinterp(frac, d0, d1, d2, d3);
-			float onepole = ((1. - fabs(curcoef)) * value) + (curcoef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
-			out[i] = lastsamp = onepole;
+				float onepole = ((1. - fabs(curcoef)) * value) + (curcoef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
+				out[i] = lastsamp = onepole;
 			}
 			feedbk += feedbk_slope;
 			curcoef +=coef_slope;
@@ -6804,24 +7077,24 @@ void Pluck_next_ka(Pluck *unit, int inNumSamples)
 	float thisin;
 
 	if ((unit->m_prevtrig <= 0.f) && (trig > 0.f)) {
-	    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-	    }
+		inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+	}
 	unit->m_prevtrig = trig;
 
 	if (delaytime == unit->m_delaytime && decaytime == unit->m_decaytime) {
 		long idsamp = (long)dsamp;
 		float frac = dsamp - idsamp;
-	for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			long irdphase1 = iwrphase - idsamp;
 			long irdphase2 = irdphase1 - 1;
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6841,7 +7114,7 @@ void Pluck_next_ka(Pluck *unit, int inNumSamples)
 		float next_feedbk = sc_CalcFeedback(delaytime, decaytime);
 		float feedbk_slope = CALCSLOPE(next_feedbk, feedbk);
 
-	    for(int i = 0; i < inNumSamples; i++){
+		for(int i = 0; i < inNumSamples; i++){
 			dsamp += dsamp_slope;
 			long idsamp = (long)dsamp;
 			float frac = dsamp - idsamp;
@@ -6850,11 +7123,11 @@ void Pluck_next_ka(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			float d0 = dlybuf[irdphase0 & mask];
 			float d1 = dlybuf[irdphase1 & mask];
 			float d2 = dlybuf[irdphase2 & mask];
@@ -6900,8 +7173,8 @@ void Pluck_next_ka_z(Pluck *unit, int inNumSamples)
 	unsigned long inputsamps = unit->m_inputsamps;
 
 	if ((unit->m_prevtrig <= 0.f) && (trig > 0.f)) {
-	    inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
-	    }
+		inputsamps = (long)(delaytime * unit->mRate->mSampleRate + .5f);
+	}
 
 	unit->m_prevtrig = trig;
 
@@ -6914,11 +7187,11 @@ void Pluck_next_ka_z(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
@@ -6942,10 +7215,10 @@ void Pluck_next_ka_z(Pluck *unit, int inNumSamples)
 					d3 = dlybuf[irdphase3 & mask];
 				}
 				float value = cubicinterp(frac, d0, d1, d2, d3);
-			float thiscoef = coef[i];
-			float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
-			out[i] = lastsamp = onepole;
+				float thiscoef = coef[i];
+				float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
+				out[i] = lastsamp = onepole;
 			}
 			iwrphase++;
 		};
@@ -6966,15 +7239,15 @@ void Pluck_next_ka_z(Pluck *unit, int inNumSamples)
 			long irdphase3 = irdphase1 - 2;
 			long irdphase0 = irdphase1 + 1;
 			if (inputsamps > 0) {
-			    thisin = in[i];
-			    --inputsamps;
-			    } else {
-			    thisin = 0.f;
-			    }
+				thisin = in[i];
+				--inputsamps;
+			} else {
+				thisin = 0.f;
+			}
 			if (irdphase0 < 0) {
 				dlybuf[iwrphase & mask] = thisin;
 				out[i] = 0.f;
-			    } else {
+			} else {
 				if (irdphase1 < 0) {
 					d1 = d2 = d3 = 0.f;
 					d0 = dlybuf[irdphase0 & mask];
@@ -6994,10 +7267,10 @@ void Pluck_next_ka_z(Pluck *unit, int inNumSamples)
 					d3 = dlybuf[irdphase3 & mask];
 				}
 				float value = cubicinterp(frac, d0, d1, d2, d3);
-			float thiscoef = coef[i];
-			float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
-			dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
-			out[i] = lastsamp = onepole;
+				float thiscoef = coef[i];
+				float onepole = ((1. - fabs(thiscoef)) * value) + (thiscoef * lastsamp);
+				dlybuf[iwrphase & mask] = thisin + feedbk * onepole;
+				out[i] = lastsamp = onepole;
 			}
 			feedbk += feedbk_slope;
 			iwrphase++;
@@ -7042,7 +7315,7 @@ void Pluck_next_ka_z(Pluck *unit, int inNumSamples)
 	uint32 bufSamples = buf->samples; \
 	uint32 bufFrames = buf->frames; \
 	int guardFrame __attribute__((__unused__)) = bufFrames - 2; \
-	double loopMax = (double)bufSamples;
+	double loopMax __attribute__((__unused__)) = (double)bufSamples;
 
 #define CHECK_DELTAP_BUF \
 	if ((!bufData) || (bufChannels != 1)) { \
@@ -7066,11 +7339,14 @@ static void DelTapWr_first(DelTapWr *unit, int inNumSamples)
 
 	// zero out the buffer!
 #ifdef NOVA_SIMD
-	uint32 unroll = bufSamples & (~15);
-	nova::zerovec_simd(bufData, unroll);
+	if (nova::vec<float>::is_aligned(bufData)) {
+		uint32 unroll = bufSamples & (~(nova::vec<float>::size - 1));
+		nova::zerovec_simd(bufData, unroll);
 
-	uint32 remain = bufSamples - unroll;
-	Clear(remain, bufData + unroll);
+		uint32 remain = bufSamples - unroll;
+		Clear(remain, bufData + unroll);
+	} else
+		Clear(bufSamples, bufData);
 #else
 	Clear(bufSamples, bufData);
 #endif
@@ -7155,7 +7431,7 @@ void DelTapWr_next_simd(DelTapWr *unit, int inNumSamples)
 	uint32 phaseIn = *iPhaseIn; \
 	float fbufnum  = IN0(0); \
 	uint32 bufnum = (uint32)fbufnum; \
-	float* out = ZOUT(0); \
+	float* out __attribute__((__unused__)) = ZOUT(0); \
 
 #define SETUP_TAPDELA \
 	float* delTime = ZIN(2); \
@@ -7485,12 +7761,14 @@ PluginLoad(Delay)
 	DefineInfoUnit(ControlDur);
 	DefineInfoUnit(SubsampleOffset);
 	DefineInfoUnit(RadiansPerSample);
+	DefineInfoUnit(BlockSize);
 	DefineInfoUnit(NumInputBuses);
 	DefineInfoUnit(NumOutputBuses);
 	DefineInfoUnit(NumAudioBuses);
 	DefineInfoUnit(NumControlBuses);
 	DefineInfoUnit(NumBuffers);
 	DefineInfoUnit(NumRunningSynths);
+	DefineInfoUnit(NodeID);
 
 #define DefineBufInfoUnit(name) \
 	(*ft->fDefineUnit)(#name, sizeof(BufInfoUnit), (UnitCtorFunc)&name##_Ctor, 0, 0);
@@ -7502,13 +7780,13 @@ PluginLoad(Delay)
 	DefineBufInfoUnit(BufChannels);
 	DefineBufInfoUnit(BufDur);
 
-	DefineDtorCantAliasUnit(PlayBuf);
+	DefineSimpleCantAliasUnit(PlayBuf);
 #if NOTYET
-	DefineDtorUnit(SimpleLoopBuf);
+	DefineSimpleUnit(SimpleLoopBuf);
 #endif
 	DefineDtorUnit(RecordBuf);
-	DefineDtorUnit(BufRd);
-	DefineDtorUnit(BufWr);
+	DefineSimpleUnit(BufRd);
+	DefineSimpleUnit(BufWr);
 	DefineDtorUnit(Pitch);
 
 	DefineSimpleUnit(BufDelayN);
@@ -7539,6 +7817,7 @@ PluginLoad(Delay)
 	DefineSimpleUnit(GrainTap);
 	DefineSimpleCantAliasUnit(TGrains);
 	DefineDtorUnit(ScopeOut);
+	DefineDtorUnit(ScopeOut2);
 	DefineDelayUnit(Pluck);
 
 	DefineSimpleUnit(DelTapWr);

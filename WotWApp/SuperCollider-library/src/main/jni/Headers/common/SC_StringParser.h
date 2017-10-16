@@ -1,7 +1,7 @@
 // emacs:		-*- c++ -*-
 // file:		SC_StringParser.h
 // copyright:	2003-2006 stefan kersten
-// cvs:			$Id: SC_StringParser.h 10259 2010-08-17 14:09:53Z danstowell $
+// cvs:			$Id$
 
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License as

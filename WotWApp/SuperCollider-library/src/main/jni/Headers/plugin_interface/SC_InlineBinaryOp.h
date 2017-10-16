@@ -22,6 +22,7 @@
 #define _BinaryOpUGen_
 
 #include "SC_BoundsMacros.h"
+#include "SC_InlineUnaryOp.h"
 #include <cmath>
 
 inline float sc_mod(float in, float hi)
@@ -37,7 +38,7 @@ inline float sc_mod(float in, float hi)
 	} else return in;
 
 	if (hi == lo) return lo;
-	return in - hi*std::floor(in/hi);
+	return in - hi*sc_floor(in/hi);
 }
 
 inline double sc_mod(double in, double hi)
@@ -53,7 +54,7 @@ inline double sc_mod(double in, double hi)
 	} else return in;
 
 	if (hi == lo) return lo;
-	return in - hi*std::floor(in/hi);
+	return in - hi*sc_floor(in/hi);
 }
 
 inline float sc_wrap(float in, float lo, float hi)
@@ -71,7 +72,7 @@ inline float sc_wrap(float in, float lo, float hi)
 	} else return in;
 
 	if (hi == lo) return lo;
-	return in - range * std::floor((in - lo)/range);
+	return in - range * sc_floor((in - lo)/range);
 }
 
 inline double sc_wrap(double in, double lo, double hi)
@@ -89,7 +90,7 @@ inline double sc_wrap(double in, double lo, double hi)
 	} else return in;
 
 	if (hi == lo) return lo;
-	return in - range * std::floor((in - lo)/range);
+	return in - range * sc_floor((in - lo)/range);
 }
 
 inline double sc_wrap(double in, double lo, double hi, double range)
@@ -104,7 +105,7 @@ inline double sc_wrap(double in, double lo, double hi, double range)
 	} else return in;
 
 	if (hi == lo) return lo;
-	return in - range * std::floor((in - lo)/range);
+	return in - range * sc_floor((in - lo)/range);
 }
 
 inline double sc_wrap(float in, float lo, float hi, float range)
@@ -119,7 +120,7 @@ inline double sc_wrap(float in, float lo, float hi, float range)
 	} else return in;
 
 	if (hi == lo) return lo;
-	return in - range * std::floor((in - lo)/range);
+	return in - range * sc_floor((in - lo)/range);
 }
 
 inline float sc_fold(float in, float lo, float hi)
@@ -140,7 +141,7 @@ inline float sc_fold(float in, float lo, float hi)
 	// ok do the divide
 	range = hi - lo;
 	range2 = range + range;
-	c = x - range2 * std::floor(x / range2);
+	c = x - range2 * sc_floor(x / range2);
 	if (c>=range) c = range2 - c;
 	return c + lo;
 }
@@ -163,7 +164,7 @@ inline double sc_fold(double in, double lo, double hi)
 	// ok do the divide
 	range = hi - lo;
 	range2 = range + range;
-	c = x - range2 * std::floor(x / range2);
+	c = x - range2 * sc_floor(x / range2);
 	if (c>=range) c = range2 - c;
 	return c + lo;
 }
@@ -184,7 +185,7 @@ inline double sc_fold(float in, float lo, float hi, float range, float range2)
 
 	if (hi == lo) return lo;
 	// ok do the divide
-	c = x - range2 * std::floor(x / range2);
+	c = x - range2 * sc_floor(x / range2);
 	if (c>=range) c = range2 - c;
 	return c + lo;
 }
@@ -205,7 +206,7 @@ inline double sc_fold(double in, double lo, double hi, double range, double rang
 
 	if (hi == lo) return lo;
 	// ok do the divide
-	c = x - range2 * std::floor(x / range2);
+	c = x - range2 * sc_floor(x / range2);
 	if (c>=range) c = range2 - c;
 	return c + lo;
 }
@@ -222,32 +223,32 @@ inline double sc_pow(double a, double b)
 
 inline float sc_round(float x, float quant)
 {
-	return quant==0. ? x : std::floor(x/quant + .5f) * quant;
+	return quant==0. ? x : sc_floor(x/quant + .5f) * quant;
 }
 
 inline double sc_round(double x, double quant)
 {
-	return quant==0. ? x : std::floor(x/quant + .5) * quant;
+	return quant==0. ? x : sc_floor(x/quant + .5) * quant;
 }
 
 inline float sc_roundUp(float x, float quant)
 {
-	return quant==0. ? x : std::ceil(x/quant) * quant;
+	return quant==0. ? x : sc_ceil(x/quant) * quant;
 }
 
 inline double sc_roundUp(double x, double quant)
 {
-	return quant==0. ? x : std::ceil(x/quant) * quant;
+	return quant==0. ? x : sc_ceil(x/quant) * quant;
 }
 
 inline float sc_trunc(float x, float quant)
 {
-	return quant==0. ? x : std::floor(x/quant) * quant;
+	return quant==0. ? x : sc_floor(x/quant) * quant;
 }
 
 inline double sc_trunc(double x, double quant)
 {
-	return quant==0. ? x : std::floor(x/quant) * quant;
+	return quant==0. ? x : sc_floor(x/quant) * quant;
 }
 
 inline float sc_atan2(float a, float b)
@@ -281,11 +282,6 @@ inline double sc_hypotx(double x, double y)
 
 	return x + y - kDSQRT2M1 * minxy;
 }
-
-#ifndef _WIN32
-#pragma mark -
-#endif //_WIN32
-
 
 inline int sc_div(int a, int b)
 {
@@ -341,23 +337,102 @@ inline int sc_fold(int in, int lo, int hi)
 	return c + lo;
 }
 
-inline int sc_gcd(int u, int v)
+
+
+inline int sc_gcd(int a, int b)
 {
 	int t;
-	u = sc_abs(u);
-	v = sc_abs(v);
-	if (u <= 1 || v <= 1) return 1;
-	while (u>0) {
-		if (u<v) { t=u; u=v; v=t; }
-		u = u % v;
+	
+	const bool negative = (a <= 0 && b <= 0);
+	
+	a = sc_abs(a);
+	b = sc_abs(b);
+	
+	if (a == 0) return b;
+	if (b == 0) return a;
+	
+	if (a == 1 || b == 1) {
+		if(negative) {
+			return -1;
+		} else {
+			return 1;
+		}
 	}
-	return v;
+
+	if (a < b) { t = a; a = b; b = t; }
+	while (b > 0) {
+		t = a % b; a = b; b = t;
+	}
+
+	if(negative) { a = 0 - a; }
+
+	return a;
 }
 
-inline int sc_lcm(int u, int v)
+
+inline int sc_lcm(int a, int b)
 {
-	return (u * v)/sc_gcd(u,v);
+    if (a == 0 || b == 0)
+        return 0;
+    else
+        return (a * b) / sc_gcd(a, b);
 }
+
+
+inline long sc_gcd(long a, long b)
+{
+	long t;
+
+	const bool negative = (a <= 0 && b <= 0);
+
+	a = sc_abs(a);
+	b = sc_abs(b);
+
+	if (a == 0) return b;
+	if (b == 0) return a;
+
+	if (a == 1 || b == 1) {
+		if(negative) {
+			return (long)-1;
+		} else {
+			return (long)1;
+		}
+	}
+
+	if (a < b) { t = a; a = b; b = t; }
+	while (b > 0) {
+		t = a % b; a = b; b = t;
+	}
+
+	if(negative) { a = 0 - a; }
+
+	return a;
+}
+
+
+inline long sc_lcm(long a, long b)
+{
+    if (a == 0 || b == 0)
+        return (long)0;
+    else
+        return (a * b) / sc_gcd(a, b);
+}
+
+
+
+inline float sc_gcd(float u, float v)
+{
+	return (float) sc_gcd((long) sc_trunc(u), (long) sc_trunc(v));
+}
+
+
+inline float sc_lcm(float u, float v)
+{
+    return (float) sc_lcm((long) sc_trunc(u), (long) sc_trunc(v));
+}
+
+
+
 
 inline int sc_bitAnd(int a, int b)
 {
@@ -541,10 +616,6 @@ inline T sc_sqrdif(T a, T b)
 	return z*z;
 }
 
-#ifndef _WIN32
-#pragma mark -
-#endif //_WIN32
-
 #if 0
 
 inline long sc_div(long a, long b)
@@ -595,24 +666,6 @@ inline long sc_rightShift(long a, long b)
 inline long sc_unsignedRightShift(long a, long b)
 {
 	return (unsigned long)a >> b;
-}
-
-inline long sc_gcd(long u, long v)
-{
-	long t;
-	u = sc_abs(u);
-	v = sc_abs(v);
-	if (u <= 1 || v <= 1) return 1;
-	while (u>0) {
-		if (u<v) { t=u; u=v; v=t; }
-		u = u % v;
-	}
-	return v;
-}
-
-inline long sc_lcm(long u, long v)
-{
-	return (u * v)/sc_gcd(u,v);
 }
 
 inline long sc_round(long x, long quant)

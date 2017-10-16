@@ -25,19 +25,7 @@
 #include "SC_Types.h"
 #include <stdexcept>
 #include <cstring>
-
-struct netaddr {
-	int socket;
-	int addr;
-	int port;
-};
-typedef struct netaddr netaddr;
-
-
-// ways to fail
-#define BUFFEROVERFLOW return
-//#define BUFFEROVERFLOW  throw std::runtime_error("buffer overflow")
-
+#include <string>
 
 template <int MaxPacketSize = 8192>
 struct scpacket {
@@ -46,6 +34,11 @@ struct scpacket {
 	char *tagwrpos;
 	int inbundle;
 	int32 buf[kBufSize];
+
+	void throw_overflow_exception()
+	{
+		throw std::runtime_error(std::string("buffer overflow"));
+	}
 
 	scpacket() { reset(); }
 	void reset()
@@ -56,8 +49,8 @@ struct scpacket {
 	}
 	void addi(int i)
 	{
-		if (wrpos >= endpos) BUFFEROVERFLOW;
-		*wrpos++ = htonl(i);
+		if (wrpos >= endpos) throw_overflow_exception();
+		*wrpos++ = sc_htonl(i);
 	}
 	void addii(int64 ii)
 	{
@@ -69,24 +62,24 @@ struct scpacket {
 	}
 	void addf(float f)
 	{
-		if (wrpos >= endpos) BUFFEROVERFLOW;
+		if (wrpos >= endpos) throw_overflow_exception();
 		elem32 slot;
 		slot.f = f;
-		*wrpos++ = htonl(slot.i);
+		*wrpos++ = sc_htonl(slot.i);
 	}
 	void addd(double f)
 	{
-		if (wrpos >= endpos) BUFFEROVERFLOW;
+		if (wrpos >= endpos) throw_overflow_exception();
 		elem64 slot;
 		slot.f = f;
-		*wrpos++ = htonl(slot.i >> 32);
-		*wrpos++ = htonl(slot.i & 0x00000000FFFFFFFF);
+		*wrpos++ = sc_htonl(slot.i >> 32);
+		*wrpos++ = sc_htonl(slot.i & 0x00000000FFFFFFFF);
 	}
 	void adds(const char *src)
 	{
 		size_t len = strlen(src);
 		size_t len4 = (len + 4) >> 2;
-		if (wrpos + len4 > endpos) BUFFEROVERFLOW;
+		if (wrpos + len4 > endpos) throw_overflow_exception();
 		wrpos[len4 - 1] = 0;
 		memcpy(wrpos, src, len);
 		wrpos += len4;
@@ -95,7 +88,7 @@ struct scpacket {
 	{
 		size_t len = strlen(src);
 		size_t len4 = (len + 5) >> 2;
-		if (wrpos + len4 > endpos) BUFFEROVERFLOW;
+		if (wrpos + len4 > endpos) throw_overflow_exception();
 		wrpos[len4 - 1] = 0;
 		char* wrpos_c = (char*)wrpos;
 		*wrpos_c = '/';
@@ -105,7 +98,7 @@ struct scpacket {
 	void adds(const char *src, size_t len)
 	{
 		size_t len4 = (len + 4) >> 2;
-		if (wrpos + len4 > endpos) BUFFEROVERFLOW;
+		if (wrpos + len4 > endpos) throw_overflow_exception();
 		wrpos[len4 - 1] = 0;
 		memcpy(wrpos, src, len);
 		wrpos += len4;
@@ -113,17 +106,17 @@ struct scpacket {
 	void addb(uint8 *src, size_t len)
 	{
 		size_t len4 = (len + 3) >> 2;
-		if (wrpos + (len4 + 1) > endpos) BUFFEROVERFLOW;
+		if (wrpos + (len4 + 1) > endpos) throw_overflow_exception();
 		wrpos[len4 - 1] = 0;
 		int32 swaplen = len;
-		*wrpos++ = htonl(swaplen);
+		*wrpos++ = sc_htonl(swaplen);
 		memcpy(wrpos, src, len);
 		wrpos += len4;
 	}
 	void addtag(char c) { *tagwrpos++ = c; }
 	void skip(int n)
 	{
-		if (wrpos + n > endpos) BUFFEROVERFLOW;
+		if (wrpos + n > endpos) throw_overflow_exception();
 		wrpos += n;
 	}
 	void maketags(int n)
@@ -133,7 +126,7 @@ struct scpacket {
 		skip(size4);
 		wrpos[-1] = 0;
 	}
-	int size() { return (char*)wrpos - (char*)buf; }
+	size_t size() { return (char*)wrpos - (char*)buf; }
 	char* data() { return (char*)buf; }
 
 	void OpenBundle(int64 time)
@@ -157,7 +150,7 @@ struct scpacket {
 	void EndMsg()
 	{
 		if (inbundle) {
-			*msgsizepos = htonl(((wrpos - msgsizepos) - 1) * sizeof(int32));
+			*msgsizepos = sc_htonl(((wrpos - msgsizepos) - 1) * sizeof(int32));
 		}
 	}
 };

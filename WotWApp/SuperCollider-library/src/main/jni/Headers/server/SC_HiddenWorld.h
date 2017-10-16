@@ -23,7 +23,6 @@
 #define _SC_HiddenWorld_
 
 #include "SC_Types.h"
-#include "SC_Sem.h"
 #include "SC_Rate.h"
 #include "SC_SndBuf.h"
 #include "SC_RGen.h"
@@ -31,6 +30,11 @@
 #include "SC_World.h"
 #include "SC_Reply.h"
 #include "MsgFifo.h"
+#include <map>
+
+#include "boost/sync/semaphore.hpp"
+
+#include "../common/server_shm.hpp"
 
 extern HashTable<struct UnitDef, Malloc> *gUnitDefLib;
 
@@ -85,14 +89,17 @@ typedef MsgFifoNoFree<NodeEndMsg, 1024> NodeEndsFifo;
 typedef MsgFifoNoFree<DeleteGraphDefMsg, 512> DeleteGraphDefsFifo;
 typedef HashTable<struct GraphDef, Malloc> GrafDefTable;
 
+typedef std::map<struct ReplyAddress, uint32> ClientIDDict;
+
 struct HiddenWorld
 {
-
 	class AllocPool *mAllocPool;
 	IntHashTable<struct Node, AllocPool> *mNodeLib;
 	GrafDefTable *mGraphDefLib;
 	uint32 mNumUsers, mMaxUsers;
 	ReplyAddress *mUsers;
+	uint32 *mClientIDs, mClientIDTop;
+	ClientIDDict *mClientIDdict;
 
 	class SC_AudioDriver *mAudioDriver;
 	char mPassword[32];
@@ -105,7 +112,8 @@ struct HiddenWorld
 	NodeEndsFifo mNodeEnds;
 	DeleteGraphDefsFifo mDeleteGraphDefs;
 
-	SC_Semaphore* mQuitProgram;
+	boost::sync::semaphore * mQuitProgram;
+	bool mTerminating;
 
 #ifndef NO_LIBSNDFILE
 	SNDFILE *mNRTInputFile;
@@ -122,6 +130,7 @@ struct HiddenWorld
 #endif
 	const char *mInDeviceName;
 	const char *mOutDeviceName;
+	class server_shared_memory_creator * mShmem;
 };
 
 typedef struct HiddenWorld HiddenWorld;

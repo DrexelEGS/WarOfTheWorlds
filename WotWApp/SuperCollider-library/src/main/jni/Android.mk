@@ -8,29 +8,36 @@ LOCAL_LDLIBS    += -L$(SYSROOT)/usr/lib -ldl -llog
 LOCAL_SHARED_LIBRARIES = libsndfile
 LOCAL_MODULE    := scsynth
 LOCAL_CPP_FEATURES += exceptions
+LOCAL_CPP_FEATURES += rtti
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/server
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/plugin_interface
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/common
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/supernova
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/fromscau
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/libc
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/libsndfile
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost_sync
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/nova-tt
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/nova-simd
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/tlsf
+LOCAL_CPPFLAGS  += -std=c++11
 LOCAL_CFLAGS    += -DSC_PLUGIN_EXT=\".so\"
-# TODO why doesn't the ndk define __linux__? 
+# TODO why doesn't the ndk define __linux__?
 LOCAL_CFLAGS    += -D__linux__
 LOCAL_CFLAGS    += -DSC_ANDROID
+LOCAL_CFLAGS    += -DBOOST_CHRONO_HEADER_ONLY
+LOCAL_CFLAGS    += -DBOOST_NO_AUTO_PTR
+LOCAL_CFLAGS    += -D_GLIBCXX_HAS_GTHREADS
 # This disables a lot of log posting from the audio thread, so improves performance. Comment it out if need debug info.
 #LOCAL_CFLAGS    += -DNDEBUG
 # TODO there may be a good memory alignment choice for arm: 1 generally ok, maybe 16 when neon.
 LOCAL_CFLAGS    += -DSC_MEMORY_ALIGNMENT=1
 LOCAL_SRC_FILES := \
     Source/server/Rendezvous.cpp \
-    Source/server/Samp.cpp \
     Source/server/SC_BufGen.cpp \
-    Source/server/SC_Carbon.cpp \
     Source/server/SC_ComPort.cpp \
-    Source/server/SC_Complex.cpp \
     Source/server/SC_CoreAudio.cpp \
-    Source/server/SC_Errors.cpp \
     Source/server/SC_Graph.cpp \
     Source/server/SC_GraphDef.cpp \
     Source/server/SC_Group.cpp \
@@ -41,17 +48,27 @@ LOCAL_SRC_FILES := \
     Source/server/SC_Rate.cpp \
     Source/server/SC_SequencedCommand.cpp \
     Source/server/SC_Str4.cpp \
-    Source/server/SC_SyncCondition.cpp \
     Source/server/scsynth_main.cpp \
     Source/server/SC_Unit.cpp \
     Source/server/SC_UnitDef.cpp \
     Source/server/SC_World.cpp \
-    Source/common/SC_Sem.cpp \
     Source/libc/glob.c \
+    Source/common/Samp.cpp \
     Source/common/SC_DirUtils.cpp \
+    Source/common/SC_Errors.cpp \
+    Source/common/SC_fftlib.cpp \
+    Source/common/SC_Reply.cpp \
+    Source/common/SC_StringBuffer.cpp \
     Source/common/SC_StringParser.cpp \
+    Source/common/SC_TextUtils.cpp \
     Source/common/SC_AllocPool.cpp \
     Source/fromscau/OSCMessages.cpp \
+    Source/tlsf/tlsf.c \
+    Source/boost/libs/chrono/src/chrono.cpp \
+    Source/boost/libs/thread/src/tss_null.cpp \
+    Source/boost/libs/thread/src/pthread/thread.cpp \
+    Source/boost/libs/thread/src/pthread/once.cpp \
+    Source/boost/libs/system/src/error_code.cpp \
     Source/server/SC_Audio_Android.cpp \
     Source/server/SC_Android.cpp 
 
@@ -66,7 +83,6 @@ LOCAL_MODULE := FFT_UGens
 LOCAL_SRC_FILES := \
     Source/common/SC_fftlib.cpp \
     Source/common/fftlib.c \
-    Source/plugins/SCComplex.cpp \
     Source/plugins/FFT_UGens.cpp \
     Source/plugins/PV_UGens.cpp \
     Source/plugins/PartitionedConvolution.cpp \
@@ -76,7 +92,10 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/libsndfile
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/plugin_interface
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/common
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/supernova
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/server
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost_sync
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Source/plugins
 LOCAL_CFLAGS    += -D__linux__
 LOCAL_CFLAGS    += -DSC_ANDROID
@@ -166,12 +185,13 @@ LOCAL_SRC_FILES := \
     $(PLUGINS_DIR)/ML.cpp \
     $(PLUGINS_DIR)/ML_SpecStats.cpp \
     $(PLUGINS_DIR)/Onsets.cpp \
-    $(PLUGINS_DIR)/onsetsds.c \
-    Source/plugins/SCComplex.cpp
+    $(PLUGINS_DIR)/onsetsds.c
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/libsndfile
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/plugin_interface
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/common
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/server
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost_sync
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Source/plugins
 LOCAL_CFLAGS    += -D__linux__
 LOCAL_CFLAGS    += -DSC_ANDROID
@@ -222,12 +242,13 @@ include ${LOCAL_PATH}/simple_ugen.mk
 include $(CLEAR_VARS)
 LOCAL_MODULE := MCLDFFTUGens
 LOCAL_SRC_FILES := \
-    $(PLUGINS_DIR)/$(LOCAL_MODULE).cpp \
-    Source/plugins/SCComplex.cpp
+    $(PLUGINS_DIR)/$(LOCAL_MODULE).cpp
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/libsndfile
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/plugin_interface
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/common
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/server
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost_sync
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Source/plugins
 LOCAL_CFLAGS    += -D__linux__
 LOCAL_CFLAGS    += -DSC_ANDROID
@@ -242,6 +263,8 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/plugin_interface
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/common
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/server
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost
+LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Headers/boost_sync
 LOCAL_C_INCLUDES+= $(LOCAL_PATH)/Source/sc3-plugins/AY_libayemu/include
 LOCAL_CFLAGS    += -DNO_LIBSNDFILE
 LOCAL_CFLAGS    += -D__linux__

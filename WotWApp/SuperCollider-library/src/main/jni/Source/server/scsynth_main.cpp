@@ -20,7 +20,8 @@
 
 
 #include "SC_WorldOptions.h"
-
+#include "SC_Version.hpp"
+#include <cstring>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -28,12 +29,10 @@
 #include "clz.h"
 #include <stdexcept>
 #ifdef _WIN32
-#include <pthread.h>
-#include <winsock2.h>
+# include <winsock2.h>
 #else
-#include <sys/wait.h>
+# include <sys/wait.h>
 #endif
-
 
 #ifdef _WIN32
 
@@ -52,8 +51,10 @@ void Usage()
 {
 	scprintf(
 		"supercollider_synth  options:\n"
+		"   -v print the supercollider version and exit\n"
 		"   -u <udp-port-number>    a port number 0-65535\n"
 		"   -t <tcp-port-number>    a port number 0-65535\n"
+		"   -B <bind-to-address>    an IP address\n"
 		"   -c <number-of-control-bus-channels> (default %d)\n"
 		"   -a <number-of-audio-bus-channels>   (default %d)\n"
 		"   -i <number-of-input-bus-channels>   (default %d)\n"
@@ -80,13 +81,12 @@ void Usage()
 #ifdef __APPLE__
 		"   -I <input-streams-enabled>\n"
 		"   -O <output-streams-enabled>\n"
-		"   -M <server-mach-port-name> <reply-mach-port-name>\n"
 #endif
 #if (_POSIX_MEMLOCK - 0) >=  200112L
 		"   -L enable memory locking\n"
 #endif
 		"   -H <hardware-device-name>\n"
-		"   -v <verbosity>\n"
+		"   -V <verbosity>\n"
 		"          0 is normal behaviour\n"
 		"          -1 suppresses informational messages\n"
 		"          -2 suppresses informational and many error messages\n"
@@ -128,30 +128,26 @@ void Usage()
 int main(int argc, char* argv[]);
 int main(int argc, char* argv[])
 {
-    setlinebuf(stdout);
+	setlinebuf(stdout);
 
 #ifdef _WIN32
-#ifdef SC_WIN32_STATIC_PTHREADS
-    // initialize statically linked pthreads library
-    pthread_win32_process_attach_np();
-#endif
-
-    // initialize winsock
-    WSAData wsaData;
+	// initialize winsock
+	WSAData wsaData;
 	int nCode;
-    if ((nCode = WSAStartup(MAKEWORD(1, 1), &wsaData)) != 0) {
+	if ((nCode = WSAStartup(MAKEWORD(1, 1), &wsaData)) != 0) {
 		scprintf( "WSAStartup() failed with error code %d.\n", nCode );
-        return 1;
-    }
+		return 1;
+	}
 #endif
 
 	int udpPortNum = -1;
 	int tcpPortNum = -1;
+	std::string bindTo("0.0.0.0");
 
 	WorldOptions options = kDefaultWorldOptions;
 
 	for (int i=1; i<argc;) {
-		if (argv[i][0] != '-' || argv[i][1] == 0 || strchr("utaioczblndpmwZrNSDIOMHvRUhPL", argv[i][1]) == 0) {
+		if (argv[i][0] != '-' || argv[i][1] == 0 || strchr("utBaioczblndpmwZrCNSDIOMHvVRUhPL", argv[i][1]) == 0) {
 			scprintf("ERROR: Invalid option %s\n", argv[i]);
 			Usage();
 		}
@@ -164,6 +160,10 @@ int main(int argc, char* argv[])
 			case 't' :
 				checkNumArgs(2);
 				tcpPortNum = atoi(argv[j+1]);
+				break;
+			case 'B':
+				checkNumArgs(2);
+				bindTo = argv[j+1];
 				break;
 			case 'a' :
 				checkNumArgs(2);
@@ -236,7 +236,7 @@ int main(int argc, char* argv[])
 #endif
 // -N cmd-filename input-filename output-filename sample-rate header-format sample-format
 				checkNumArgs(7);
-                                options.mRealTime = false;
+				options.mRealTime = false;
 				options.mNonRealTimeCmdFilename    = strcmp(argv[j+1], "_") ? argv[j+1] : 0;
 				options.mNonRealTimeInputFilename  = strcmp(argv[j+2], "_") ? argv[j+2] : 0;
 				options.mNonRealTimeOutputFilename = argv[j+3];
@@ -253,12 +253,7 @@ int main(int argc, char* argv[])
 				checkNumArgs(2);
 				options.mOutputStreamsEnabled = argv[j+1];
 				break;
-            case 'M':
-// -M serverPortName replyPortName
-                checkNumArgs(3);
-                options.mServerPortName = CFStringCreateWithCStringNoCopy(NULL, argv[j + 1], kCFStringEncodingUTF8, kCFAllocatorNull);
-                options.mReplyPortName = CFStringCreateWithCStringNoCopy(NULL, argv[j + 2], kCFStringEncodingUTF8, kCFAllocatorNull);
-                break;
+			case 'M':
 #endif
 			case 'H' :
 				checkNumArgs(2);
@@ -286,9 +281,13 @@ int main(int argc, char* argv[])
 				options.mMemoryLocking = false;
 #endif
 				break;
-			case 'v' :
+			case 'V' :
 				checkNumArgs(2);
 				options.mVerbosity = atoi(argv[j+1]);
+				break;
+			case 'v' :
+				scprintf("scsynth %s (%s)\n", SC_VersionString().c_str(), SC_BuildString().c_str());
+				exit(0);
 				break;
 			case 'R' :
 				checkNumArgs(2);
@@ -302,6 +301,9 @@ int main(int argc, char* argv[])
 				checkNumArgs(2);
 				options.mRestrictedPath = argv[j+1];
 				break;
+			case 'C' :
+				checkNumArgs(2);
+				break;
 			case 'h':
 			default: Usage();
 		}
@@ -314,6 +316,15 @@ int main(int argc, char* argv[])
 		scprintf("ERROR: number of audio bus channels < inputs + outputs.\n");
 		Usage();
 	}
+
+	if (options.mRealTime) {
+		int port = (udpPortNum > 0) ? udpPortNum
+									: tcpPortNum;
+
+		options.mSharedMemoryID = port;
+	} else
+		options.mSharedMemoryID = 0;
+
 
 	struct World *world = World_New(&options);
 	if (!world) return 1;
@@ -334,21 +345,17 @@ int main(int argc, char* argv[])
 	}
 
 	if (udpPortNum >= 0) {
-		if (!World_OpenUDP(world, udpPortNum)) {
-			World_Cleanup(world);
+		if (!World_OpenUDP(world, bindTo.c_str(), udpPortNum)) {
+			World_Cleanup(world,true);
 			return 1;
 		}
 	}
 	if (tcpPortNum >= 0) {
-		if (!World_OpenTCP(world, tcpPortNum, options.mMaxLogins, 8)) {
-			World_Cleanup(world);
+		if (!World_OpenTCP(world, bindTo.c_str(), tcpPortNum, options.mMaxLogins, 8)) {
+			World_Cleanup(world,true);
 			return 1;
 		}
 	}
-
-#ifdef __APPLE__
-    //World_OpenMachPorts(world, options.mServerPortName, options.mReplyPortName);
-#endif
 
 	if(options.mVerbosity >=0){
 #ifdef NDEBUG
@@ -359,18 +366,14 @@ int main(int argc, char* argv[])
 	}
 	fflush(stdout);
 
-	World_WaitForQuit(world);
+	World_WaitForQuit(world,true);
 
 
 #ifdef _WIN32
-    // clean up winsock
-    WSACleanup();
+	// clean up winsock
+	WSACleanup();
 
-#ifdef SC_WIN32_STATIC_PTHREADS
-    // clean up statically linked pthreads
-    pthread_win32_process_detach_np();
-#endif
-#endif
+#endif // _WIN32
 
 	return 0;
 }

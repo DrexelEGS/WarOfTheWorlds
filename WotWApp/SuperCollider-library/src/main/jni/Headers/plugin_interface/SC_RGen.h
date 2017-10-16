@@ -71,6 +71,9 @@ struct RGen
 	float frand2();
 	float frand0();
 	float frand8();
+	float flinrand();
+	float fbilinrand();
+	float fsum3rand();
 	double drand();
 	double drand2(double scale);
 	double linrand(double scale);
@@ -101,19 +104,16 @@ inline uint32 trand( uint32& s1, uint32& s2, uint32& s3 )
 	// state variables are loaded into registers.
 	// Thus updating the instance variables can
 	// be postponed until the end of the loop.
-	s1 = ((s1 &  -2) << 12) ^ (((s1 << 13) ^  s1) >> 19);
-	s2 = ((s2 &  -8) <<  4) ^ (((s2 <<  2) ^  s2) >> 25);
-	s3 = ((s3 & -16) << 17) ^ (((s3 <<  3) ^  s3) >> 11);
+	s1 = ((s1 &  (uint32)-2) << 12) ^ (((s1 << 13) ^  s1) >> 19);
+	s2 = ((s2 &  (uint32)-8) <<  4) ^ (((s2 <<  2) ^  s2) >> 25);
+	s3 = ((s3 & (uint32)-16) << 17) ^ (((s3 <<  3) ^  s3) >> 11);
 	return s1 ^ s2 ^ s3;
 }
 
 inline uint32 RGen::trand()
 {
 	// generate a random 32 bit number
-	s1 = ((s1 &  -2) << 12) ^ (((s1 << 13) ^  s1) >> 19);
-	s2 = ((s2 &  -8) <<  4) ^ (((s2 <<  2) ^  s2) >> 25);
-	s3 = ((s3 & -16) << 17) ^ (((s3 <<  3) ^  s3) >> 11);
-	return s1 ^ s2 ^ s3;
+	return ::trand(s1, s2, s3);
 }
 
 inline double RGen::drand()
@@ -168,6 +168,27 @@ inline float RGen::fcoin()
 	u.i = 0x3F800000 | (0x80000000 & trand());
 	return u.f;
 }
+
+inline float RGen::flinrand()
+{
+	float a = frand();
+	float b = frand();
+	return sc_min(a,b);
+}
+
+inline float RGen::fbilinrand()
+{
+	float a = frand();
+	float b = frand();
+	return a - b;
+}
+
+inline float RGen::fsum3rand()
+{
+	// larry polansky's poor man's gaussian generator
+	return (frand() + frand() + frand() - 1.5) * 0.666666667;
+}
+
 
 inline int32 RGen::irand(int32 scale)
 {
@@ -283,6 +304,8 @@ inline float fcoin( uint32& s1, uint32& s2, uint32& s3 )
 	u.i = 0x3F800000 | (0x80000000 & trand(s1,s2,s3));
 	return u.f;
 }
+
+
 
 #endif
 

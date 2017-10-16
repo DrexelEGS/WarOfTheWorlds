@@ -23,12 +23,13 @@
 #include "SC_AllocPool.h"
 #include "SC_BoundsMacros.h"
 #include <assert.h>
+#include <string>
 
 /*
    Requests are `small' if both the corresponding and the next bin are small
 */
 
-#if DEBUG
+#ifdef ENABLE_MEMORY_CHECKS
 #define check_pool()  DoCheckPool()
 #define check_free_chunk(P)  DoCheckFreeChunk(P)
 #define check_inuse_chunk(P) DoCheckInUseChunk(P)
@@ -44,7 +45,7 @@
 #define garbage_fill(P)
 #endif
 
-#define aligned_OK(m)    ((((unsigned long)(m)) & kAlignMask) == 0)
+#define aligned_OK(m)    ((((size_t)(m)) & kAlignMask) == 0)
 
 /*
 void* allocmem(AllocPool *pool, int32 size);
@@ -154,6 +155,10 @@ void AllocPool::Reinit()
 
 void AllocPool::Free(void *inPtr)
 {
+#ifdef DISABLE_MEMORY_POOLS
+	free(inPtr);
+	return;
+#endif
 
 	check_pool();
 	if (inPtr == 0) return;                   /* free(0) has no effect */
@@ -196,12 +201,12 @@ AllocAreaPtr AllocPool::NewArea(size_t inAreaSize)
 {
 	void *ptr = (AllocAreaPtr)(mAllocArea)(inAreaSize + kAreaOverhead);
 
-	if (ptr == NULL) {
-		throw std::runtime_error("Could not allocate new area");
-	}
+	if (ptr == NULL)
+		throw std::runtime_error(std::string("Could not allocate new area"));
+
 	// AllocAreaPtr area = (AllocAreaPtr)((unsigned long)ptr & ~kAlignMask);
-	AllocAreaPtr area = (AllocAreaPtr)(((unsigned long)ptr + kAlignMask) & ~kAlignMask);
-	assert((area >= ptr) && ((void*)((unsigned long)area & ~kAlignMask) == area));
+	AllocAreaPtr area = (AllocAreaPtr)(((size_t)ptr + kAlignMask) & ~kAlignMask);
+	assert((area >= ptr) && ((void*)((size_t)area & ~kAlignMask) == area));
 
 	area->mUnalignedPointerToThis = ptr;
 
@@ -269,8 +274,8 @@ size_t AllocPool::LargestFreeChunk()
 	int bitPosition = NUMBITS(binBits) - 1;
 	int index = (word << 5) + bitPosition;
 	AllocChunkPtr bin = mBins + index;
-	//postbuf("** %08X %08X %08X %08X\n", mBinBlocks[0], mBinBlocks[1], mBinBlocks[2], mBinBlocks[3]);
-	//postbuf("%d %d %d %08X    %08X %08X\n", word, bitPosition, index, binBits, bin->Prev(), bin->Next());
+	//postbuf("** %p %p %p %p\n", mBinBlocks[0], mBinBlocks[1], mBinBlocks[2], mBinBlocks[3]);
+	//postbuf("%d %d %d %p    %p %p\n", word, bitPosition, index, binBits, bin->Prev(), bin->Next());
 
 	AllocChunkPtr candidate;
 	size_t maxsize = 0;
@@ -291,6 +296,10 @@ size_t AllocPool::LargestFreeChunk()
 
 void* AllocPool::Alloc(size_t inReqSize)
 {
+#ifdef DISABLE_MEMORY_POOLS
+	return malloc(inReqSize);
+#endif
+
 	// OK it has a lot of gotos, but these remove a whole lot of common code
 	// that was obfuscating the original version of this function.
 	// So here I am choosing the OnceAndOnlyOnce principle over the caveats on gotos.
@@ -379,7 +388,7 @@ void* AllocPool::Alloc(size_t inReqSize)
 	// exit paths:
 	found_nothing:
 		//ipostbuf("alloc failed. size: %d\n", inReqSize);
-		throw std::runtime_error("alloc failed, increase server's memory allocation (e.g. via ServerOptions)");
+		throw std::runtime_error(std::string("alloc failed, increase server's memory allocation (e.g. via ServerOptions)"));
 
 	whole_new_area:
 		//ipostbuf("whole_new_area\n");
@@ -421,6 +430,11 @@ void* AllocPool::Alloc(size_t inReqSize)
 
 void* AllocPool::Realloc(void* inPtr, size_t inReqSize)
 {
+#ifdef DISABLE_MEMORY_POOLS
+	return realloc(inPtr, inReqSize);
+#endif
+
+
 	void *outPtr;
 	AllocChunkPtr prev;
 	check_pool();
@@ -483,7 +497,7 @@ void* AllocPool::Realloc(void* inPtr, size_t inReqSize)
 		check_pool();
 		if (outPtr == 0) {
 			//ipostbuf("realloc failed. size: %d\n", inReqSize);
-			throw std::runtime_error("realloc failed, increase server's memory allocation (e.g. via ServerOptions)");
+			throw std::runtime_error(std::string("realloc failed, increase server's memory allocation (e.g. via ServerOptions)"));
 		}
 
 		/* Otherwise copy, free, and exit */
@@ -521,7 +535,7 @@ void* AllocPool::Realloc(void* inPtr, size_t inReqSize)
 void AllocPool::LinkFree(AllocChunkPtr inChunk)
 {
 	size_t size = inChunk->Size();
-	int index = BinIndex(size);
+	size_t index = BinIndex(size);
 
 	AllocChunkPtr bin = mBins + index;
 

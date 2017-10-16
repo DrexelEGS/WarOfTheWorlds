@@ -140,13 +140,26 @@ void KeyTrack_next(KeyTrack *unit, int wrongNumSamples)
 void KeyTrack_calculatekey(KeyTrack *unit, uint32 ibufnum)
 {
 	World *world = unit->mWorld;
-	if (ibufnum >= world->mNumSndBufs) ibufnum = 0;
-	SndBuf *buf = world->mSndBufs + ibufnum;
+	
+    SndBuf *buf;
+    
+    if (ibufnum >= world->mNumSndBufs) { 
+		int localBufNum = ibufnum - world->mNumSndBufs; 
+		Graph *parent = unit->mParent; 
+		if(localBufNum <= parent->localBufNum) { 
+			buf = parent->mLocalSndBufs + localBufNum; 
+		} else { 
+			buf = world->mSndBufs; 
+			if(unit->mWorld->mVerbosity > -1){ Print("KeyTrack error: Buffer number overrun: %i\n", ibufnum); } 
+		} 
+	} else { 
+		buf = world->mSndBufs + ibufnum; 
+	} 
+    
 	LOCK_SNDBUF(buf);
-	int numbins = (buf->samples - 2) >> 1;
 
 	//assumed in this representation
-	SCComplexBuf *p = ToComplexApx(buf);
+	ToComplexApx(buf);
 
 	const float * data= buf->data;
 
@@ -187,8 +200,6 @@ void KeyTrack_calculatekey(KeyTrack *unit, uint32 ibufnum)
 		indexbase= 12*i; //6 partials, 2 of each
 
 		//transient sum, setting up last values too
-
-		float phasesum=0.0;
 
 		for(int j=0;j<12;++j) { //12 if 144 data points
 

@@ -21,6 +21,7 @@
 
 #include "SC_World.h"
 #include "SC_WorldOptions.h"
+#include "SC_Version.hpp"
 
 #include <android/log.h>
 #include <jni.h>
@@ -53,13 +54,6 @@ extern "C" void scsynth_android_initlogging() {
 	#else
 		scprintf("SCSYNTH->ANDROID logging active (debug)\n");
 	#endif
-}
-
-void* scThreadFunc(void* arg)
-{
-    World* world  = (World*)arg;
-    World_WaitForQuit(world);
-    return 0;
 }
 
 void null_reply_func(struct ReplyAddress* /*addr*/, char* /*msg*/, int /*size*/);
@@ -97,10 +91,10 @@ jobject convertMessageToJava(JNIEnv* myEnv, char* inData, int inSize) {
 	jmethodID addLng = myEnv->GetMethodID(oscMessageClass, "add", "(J)Z");
 
 	// Did I steal this wholesale from dumpOSCmsg?  Yes I did.  -ajs 20100826
-	char * data;
+	const char * data;
 	int size;
 	if (inData[0]) {
-		char *addr = inData;
+		const char *addr = inData;
 		data = OSCstrskip(inData);
 		size = inSize - (data - inData);
 		jstring jaddr = myEnv->NewStringUTF(addr);
@@ -169,34 +163,22 @@ static World * world;
 static short* buff;
 static int bufflen;
 
-static SC_UdpInPort* udpInPort = NULL;
 /*
- * this is like World_OpenUDP() except it stores a static reference to the object
- * TODO: maybe we could destatickify by pass a reference to the object back to java, to be passed to the closer?
+ * this is simply calling World_OpenUDP()
+ * ((previous version stored a static reference which needed the class UdpInPort exposed
+ * in a header, but the newer version of it doesn't even have accessible cleanup destructor code,
+ * so that is unnecessary.)
  */
 extern "C" void scsynth_android_open_udp(JNIEnv* env, jobject obj, jint port) {
 	scprintf("scsynth_android_open_udp\n");
-	try {
-		udpInPort = new SC_UdpInPort(world, port);
-	} catch (std::exception& exc) {
-		scprintf("Exception in scsynth_android_open_udp: %s\n", exc.what());
-		udpInPort = NULL;
-	} catch (...) {
+    std::string bindTo("0.0.0.0");
+    int result = World_OpenUDP(world, bindTo.c_str(), port);
+    if (result == false) {
+		scprintf("Error in scsynth_android_open_udp\n");
 	}
 }
 extern "C" void scsynth_android_close_udp(JNIEnv* env, jobject obj) {
-	scprintf("scsynth_android_close_udp\n");
-	if(udpInPort==NULL){
-		scprintf("scsynth_android_close_udp : no open port to close\n");
-		return;
-	}
-	try {
-		udpInPort->~SC_UdpInPort();
-		udpInPort = NULL;
-	} catch (std::exception& exc) {
-		scprintf("Exception in scsynth_android_close_udp: %s\n", exc.what());
-	} catch (...) {
-	}
+	scprintf("scsynth_android_close_udp does not do anything anymore now.\n");
 }
 
 extern "C" int scsynth_android_start(JNIEnv* env, jobject obj, 
@@ -212,6 +194,7 @@ extern "C" int scsynth_android_start(JNIEnv* env, jobject obj,
 		(int)srate, (int)hwBufSize, (int)numInChans, (int)numOutChans, (int)shortsPerSample, pluginsPath_c, synthDefsPath_c);
     setenv("SC_PLUGIN_PATH",   pluginsPath_c,   1);
     setenv("SC_SYNTHDEF_PATH", synthDefsPath_c, 1);
+	__android_log_print(ANDROID_LOG_DEBUG, "libscsynth", "scsynth %s (%s)\n", SC_VersionString().c_str(), SC_BuildString().c_str());
     
     // DEBUG: Check that we can read the path
 	DIR *dip;
@@ -251,14 +234,16 @@ extern "C" int scsynth_android_start(JNIEnv* env, jobject obj,
 	
 	
 	// Similar to SCProcess:startup :
-	pthread_t scThread;
+	//pthread_t scThread;
 	OSCMessages messages;
 	
     world = World_New(&options);
     //world->mDumpOSC=2;
-    if (world) {
-        pthread_create (&scThread, NULL, scThreadFunc, (void*)world);
-    }
+    // since World_New now always calls scsynth::startAsioThread(); to start a thread
+    // there is no need to do that ourselves any more
+    //if (world) {
+    //    pthread_create (&scThread, NULL, scThreadFunc, (void*)world);
+    //}
     if (world->mRunning){
         small_scpacket packet = messages.initTreeMessage();
         World_SendPacket(world, 16, (char*)packet.buf, null_reply_func);
