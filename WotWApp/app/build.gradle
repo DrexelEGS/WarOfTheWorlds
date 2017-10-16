@@ -31,6 +31,15 @@ android {
     aaptOptions.useNewCruncher = false
     productFlavors {
     }
+    task copyAAR(type: Copy) {
+        from('../SuperCollider-library/build/outputs/aar')
+        into('./libs')
+        include('SuperCollider-library' + '-debug.aar')
+        include('SuperCollider-library' + '-release.aar')
+    }
+    tasks.withType(JavaCompile) {
+        compileTask -> compileTask.dependsOn(copyAAR)
+    }
 }
 
 dependencies {

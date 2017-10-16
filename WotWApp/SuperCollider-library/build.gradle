@@ -40,14 +40,3 @@ dependencies {
     androidTestCompile 'junit:junit:4.12'
 }
 
-task copyAAR(type: Copy) {
-    from('build/outputs/aar')
-    into('../app/libs')
-    include(project.name + '-debug.aar')
-    include(project.name + '-release.aar')
-}
-
-gradle.projectsEvaluated {
-    assembleDebug.finalizedBy copyAAR
-    assembleRelease.finalizedBy copyAAR
-}
