@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">WOTW app</string>
+    <string name="app_name" translatable="false">WOTW app</string>
     <string name="action_settings">Settings</string>
     <string name="host">Host</string>
     <string name="communication">Communication</string>
@@ -12,15 +12,15 @@
     <string name="about_copyright">© Stefan Rank, Karishma Changlani 2017 &lt;a href=&quot;http://www.waroftheworldsphilly.org/&quot;>War of the Worlds Philly project&lt;/a> and Thomas Mayer, Antonio Deusany de Carvalho Junior 2015, &lt;a href=&quot;http://sensors2.org/osc/&quot;>sensors2.org/osc&lt;/a></string>
     <string name="about_buglinks">Please report bugs by sending email to &lt;a href=&quot;mailto:list-ener@strank.info&quot;">list-ener@strank.info&lt;/a>. Or contact the Sensors2OSC project.</string>
     <string name="about_license">License</string>
-    <string name="about_mit_license_1">Permission is hereby granted, free of charge, to any person obtaining a copy
+    <string name="about_mit_license_1" translatable="false">Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the &quot;Software&quot;), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:</string>
-    <string name="about_mit_license_2">The above copyright notice and this permission notice shall be included in
+    <string name="about_mit_license_2" translatable="false">The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.</string>
-    <string name="about_mit_license_3"><![CDATA[THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    <string name="about_mit_license_3" translatable="false"><![CDATA[THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -41,7 +41,7 @@ THE SOFTWARE.]]></string>
     <string name="guide_max_range">Max range</string>
     <string name="guide_resolution">Resolution</string>
     <string name="guide_osc_address">OSC addresses:</string>
-    <string name="sensor_nfc">Near Field Communication</string>
+    <string name="sensor_nfc">Near Field Communication (NFC)</string>
     <string name="sensor_accelerometer">Accelerometer</string>
     <string name="sensor_magnetic_field">Magnetic Field</string>
     <string name="sensor_orientation">Orientation</string>
@@ -69,8 +69,8 @@ THE SOFTWARE.]]></string>
     <string name="sensor_pick_up_gesture">Pick Up Gesture</string>
     <string name="sensor_wrist_tilt_gesture">Wrist Tilt Gesture</string>
     <string name="sensor_unknown">Unknown Sensor</string>
-    <string name="title_activity_super_collider">SuperColliderActivity</string>
-    <string name="large_text">
+    <string name="title_activity_super_collider" translatable="false">SuperColliderActivity</string>
+    <string name="large_text" translatable="false">
         "Material is the metaphor.\n\n"
 
         "A material metaphor is the unifying theory of a rationalized space and a system of motion."
