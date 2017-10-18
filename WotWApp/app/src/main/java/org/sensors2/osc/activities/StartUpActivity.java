@@ -101,7 +101,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     int node = 1001;
     double curr_frequency = 400;
     final double MAX_DISTANCE = 100;
-    final double MIN_DISTANCE = 7;
+    final double MIN_DISTANCE = 10;
     private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
     private static final int MIN_TIME_BETWEEN_SHAKES_MILLISECS = 1000;
     private long mLastShakeTime;
@@ -155,7 +155,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             if((latitude > 39 && latitude < 41) && (longitude > -76 && longitude < -74))
                 currentLocation = new LatLng(latitude, longitude);
         }
-        changeSynthFreq();
+        changeSynth();
         mapFragment.getMapAsync(this);
     }
 
@@ -192,8 +192,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     String soundsDirStr = ScService.getSoundsDirStr(StartUpActivity.this);
                     String[] filesToDeliver = StartUpActivity.this.getAssets().list("");
                     StringBuilder sb = new StringBuilder();
+                    ScService.initDataDir(soundsDirStr);
                     for (String fileTD : filesToDeliver) {
-                        if (fileTD.toLowerCase().endsWith(".wav")) {
+                        if (fileTD.toLowerCase().endsWith(".wav")   ) {
                             ScService.deliverDataFile(StartUpActivity.this, fileTD, soundsDirStr);
                             sb.append(fileTD + " ");
                         }
@@ -332,6 +333,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
 
+    }
+
+    protected void onDestroy(Bundle savedInstanceState) {
+    unbindService(conn);
     }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
@@ -646,6 +651,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 Log.d("Shake", "Acceleration is " + acceleration + "m/s^2");
 
                 if (acceleration > SHAKE_THRESHOLD) {
+                    listeningForShake = false;
                     updateTarget();
                     mLastShakeTime = curTime;
                     Log.d("Shake", "Shake, Rattle, and Roll");
@@ -691,14 +697,15 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
     }
 
-    public void changeSynthFreq(){
+    public void changeSynth(){
         try {
             //ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
             //superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
             Location current = LatLngTOLocation(currentLocation);
             Location target = LatLngTOLocation(targetLocation);
             double distance = current.distanceTo(target);
-            double freq = 200; //setting up minimum aplititude so we always know that the synth is working.
+            double amp = 0.1;
+            double freq = 200; //setting up minimum frequency so we always know that the synth is working.
             double scale = 1;
             Log.d(Double.toString(distance), "Frequency synth");
             if(distance < MAX_DISTANCE){
@@ -710,6 +717,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 else {
                     freq = 800 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE)*200; //a negative slope fuction to ensure smooth increase
                     scale = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                    amp = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
                 }
             }
             Toast.makeText(getApplicationContext(), "Scale: "+ scale, Toast.LENGTH_SHORT).show();
@@ -718,6 +726,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Log.d(Double.toString(freq), "Frequency synth");
             //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node], 0, 1, "freq", (float)freq}));
             superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "freq", (float)freq}));
+            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "amp", (float)amp}));
+
             superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "dist", (float)scale}));
 
             setUpControls(); // now we have an audio engine, let the activity hook up its controls
@@ -806,7 +816,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             //MediaPlayer mp = MediaPlayer.create(this, );
             try {
 
-                superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "synth0", node, 0, 1}));
+                superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "sonar", node, 0, 1}));
                 String soundFile = "a11wlk01.wav";
                 String synthName = "bufSticker";
                 int bufferIndex = 10;
@@ -837,8 +847,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
     }
     public void onMapReady(GoogleMap map){
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
-        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, this);
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10, 1, this);
+        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10, 1, this);
         if(this.map == null) {
             this.map = map;
             addMarkers();
