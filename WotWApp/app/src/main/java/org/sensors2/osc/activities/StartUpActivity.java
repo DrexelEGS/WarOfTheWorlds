@@ -16,7 +16,6 @@ import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.media.MediaPlayer;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
@@ -52,13 +51,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import net.sf.supercollider.android.ISuperCollider;
-import net.sf.supercollider.android.OscMessage;
-import net.sf.supercollider.android.SCAudio;
-import net.sf.supercollider.android.ScService;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
-import com.google.android.gms.maps.model.LatLng;
 
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
@@ -66,7 +61,6 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.maps.model.LatLng;
 
 
 import org.sensors2.common.dispatch.DataDispatcher;
@@ -85,27 +79,22 @@ import org.sensors2.osc.fragments.SensorFragment;
 import org.sensors2.osc.fragments.StartupFragment;
 import org.sensors2.osc.sensors.SensorDimensions;
 import org.sensors2.osc.sensors.Settings;
-import org.w3c.dom.Text;
 
-import java.io.IOException;
-import java.lang.reflect.Array;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+
+import info.strank.wotw.SensorTracking;
+import info.strank.wotw.SoundManager;
 
 public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener, LocationListener {
 
-    final String LOG_LABEL = "Location Listener>>";
-    int node = 1001;
-    double curr_frequency = 400;
-    final double MAX_DISTANCE = 100;
-    final double MIN_DISTANCE = 10;
-    private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
-    private static final int MIN_TIME_BETWEEN_SHAKES_MILLISECS = 1000;
-    private long mLastShakeTime;
-    private boolean listeningForShake = false;
+    final String LOG_LABEL = "StartUpActivity";
+    // WotW specific tracking and sound generation:
+    private SensorTracking sensorTracking = new SensorTracking();
+    private SoundManager soundManager = new SoundManager();
+
     private LocationManager locationManager;
     private Settings settings;
     private SensorCommunication sensorFactory;
@@ -117,14 +106,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private Marker marker;
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
-    private LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
-    private LatLng currentLocation = exciteLocation;
-    private LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
-    private LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
-    private LatLng[] testTargetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
-    int location_no = 0;
-    private LatLng targetLocation  = testTargetLocations[0];
-    private ISuperCollider.Stub superCollider;
     private TextView mainWidget = null;
     private ServiceConnection conn = new ScServiceConnection();
 
@@ -141,145 +122,51 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onLocationChanged(Location location) {
-        TextView view = (TextView) this.findViewById(R.id.DisplayText);
-
-        Log.d("GPS", LOG_LABEL + "Location Changed");
         if (location != null) {
-            view.append(Double.toString(location.getLatitude()));
-            double longitude = location.getLongitude();
-            Log.d("GPS", LOG_LABEL + "Longitude:" + longitude);
-            double latitude = location.getLatitude();
-            Toast.makeText(getApplicationContext(), "Freq: "+ curr_frequency, Toast.LENGTH_SHORT).show();
-            Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
-            Log.d("GPS", LOG_LABEL + "Latitude:" + latitude);
-            if((latitude > 39 && latitude < 41) && (longitude > -76 && longitude < -74))
-                currentLocation = new LatLng(latitude, longitude);
+            double distance = this.sensorTracking.updateDistance(location);
+            try {
+                if (this.soundManager.changeSynth(distance)) {
+                    initiateShakePopup();
+                }
+            } catch (RemoteException e){
+                e.printStackTrace();
+            }
+            Toast.makeText(getApplicationContext(), this.soundManager.currentParamStr, Toast.LENGTH_SHORT).show();
+            // debug display and log:
+            TextView view = (TextView) this.findViewById(R.id.DisplayText);
+            view.append(Double.toString(this.sensorTracking.currentLocation.latitude));
         }
-        changeSynth();
         mapFragment.getMapAsync(this);
     }
 
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {
-
     }
 
     @Override
     public void onProviderEnabled(String provider) {
-
     }
 
     @Override
     public void onProviderDisabled(String provider) {
-
-    }
-
-    public Location LatLngTOLocation(LatLng locationcoords){
-        Location location = new Location(LocationManager.GPS_PROVIDER);
-        location.setLatitude(locationcoords.latitude);
-        location.setLongitude(locationcoords.longitude);
-        return location;
     }
 
     private class ScServiceConnection implements ServiceConnection {
         //@Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            StartUpActivity.this.superCollider = (ISuperCollider.Stub) service;
+            StartUpActivity.this.soundManager.superCollider = (ISuperCollider.Stub) service;
             try {
-                //transfer files
-                try {
-                    // deliver all wav files:
-                    String soundsDirStr = ScService.getSoundsDirStr(StartUpActivity.this);
-                    String[] filesToDeliver = StartUpActivity.this.getAssets().list("");
-                    StringBuilder sb = new StringBuilder();
-                    ScService.initDataDir(soundsDirStr);
-                    for (String fileTD : filesToDeliver) {
-                        if (fileTD.toLowerCase().endsWith(".wav")   ) {
-                            ScService.deliverDataFile(StartUpActivity.this, fileTD, soundsDirStr);
-                            sb.append(fileTD + " ");
-                        }
-                    }
-                    Log.i(LOG_LABEL, "delivered wave files: " + sb.toString());
-                } catch (IOException e)
-                {
-                    e.printStackTrace();
-                }
-                // Kick off the supercollider playback routine
-                superCollider.start();
-                // Start a synth that increases amplitude based on GPS location distance
-                //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "frequency", OscMessage.defaultNodeId, 0, 1, "freq", 400}));
-                if(SCAudio.hasMessages()){
-                    OscMessage receivedMessage = SCAudio.getMessage();
-                    Log.d(receivedMessage.get(0).toString(), "scydef message");
-                }
+                StartUpActivity.this.soundManager.startUp(StartUpActivity.this);
             } catch (RemoteException re) {
                 re.printStackTrace();
             }
         }
         //@Override
         public void onServiceDisconnected(ComponentName name) {
-
+            // TODO: should we call stop here? (which also sends a quit message)
+            //superCollider.stop();
+            //StartUpActivity.this.soundManager.shutDown();
         }
-    }
-
-    /**
-     * Provide the glue between the user's greasy fingers and the supercollider's shiny metal body
-     * Fix how this gets osc messages
-     */
-    public void setUpControls() {
-        if (mainWidget!=null) mainWidget.setOnTouchListener(new View.OnTouchListener() {
-            //@Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if (event.getAction()==MotionEvent.ACTION_UP) {
-                    // OSC message right here!
-                    OscMessage noteMessage = new OscMessage( new Object[] {
-                            "/n_set", OscMessage.defaultNodeId, "amp", 0f
-                    });
-                    try {
-                        // Now send it over the interprocess link to SuperCollider running as a Service
-                        superCollider.sendMessage(noteMessage);
-                    } catch (RemoteException e) {
-                        Toast.makeText(
-                                StartUpActivity.this,
-                                "Failed to communicate with SuperCollider!",
-                                Toast.LENGTH_SHORT);
-                        e.printStackTrace();
-                    }
-                } else if ((event.getAction()==MotionEvent.ACTION_DOWN) || (event.getAction()==MotionEvent.ACTION_MOVE)) {
-                    float vol = 1f - event.getY()/mainWidget.getHeight();
-                    OscMessage noteMessage = new OscMessage( new Object[] {
-                            "/n_set", OscMessage.defaultNodeId, "amp", vol
-                    });
-                    //float freq = 150+event.getX();
-                    //0 to mainWidget.getWidth() becomes sane-ish range of midinotes:
-                    float midinote = event.getX() * (70.f / mainWidget.getWidth()) + 28.f;
-                    float freq = sc_midicps(Math.round(midinote));
-                    OscMessage pitchMessage = new OscMessage( new Object[] {
-                            "/n_set", OscMessage.defaultNodeId, "freq", freq
-                    });
-                    try {
-                        superCollider.sendMessage(noteMessage);
-                        superCollider.sendMessage(pitchMessage);
-                    } catch (RemoteException e) {
-                        Toast.makeText(
-                                StartUpActivity.this,
-                                "Failed to communicate with SuperCollider!",
-                                Toast.LENGTH_SHORT);
-                        e.printStackTrace();
-                    }
-                }
-                return true;
-            }
-        });
-        try {
-            superCollider.openUDP(57110);
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
-    }
-
-    float sc_midicps(float note) {
-        return (float) (440.0 * Math.pow((float) 2., (note - 69.0) * (float) 0.083333333333));
     }
 
     public static boolean hasPermissions(Context context, String... permissions) {
@@ -304,7 +191,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
         }
 
-        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        this.locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         setContentView(R.layout.activity_main);
         mainWidget = new TextView(this); //TODO: Find a way to get rid of this
         bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
@@ -624,6 +511,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onStop() {
         super.onStop();
         try {
+            // TODO: we should probably do this, not sure why it is commented out here:
             // Free up audio when the activity is not in the foreground
             // if (superCollider!=null) superCollider.stop();
             this.finish();
@@ -638,28 +526,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER && listeningForShake) {
-            long curTime = System.currentTimeMillis();
-            if ((curTime - mLastShakeTime) > MIN_TIME_BETWEEN_SHAKES_MILLISECS) {
-
-                float x = sensorEvent.values[0];
-                float y = sensorEvent.values[1];
-                float z = sensorEvent.values[2];
-
-                double acceleration = Math.sqrt(Math.pow(x, 2) +
-                        Math.pow(y, 2) +
-                        Math.pow(z, 2)) - SensorManager.GRAVITY_EARTH;
-                Log.d("Shake", "Acceleration is " + acceleration + "m/s^2");
-
-                if (acceleration > SHAKE_THRESHOLD) {
-                    listeningForShake = false;
-                    updateTarget();
-                    mLastShakeTime = curTime;
-                    Log.d("Shake", "Shake, Rattle, and Roll");
-                }
+        if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            if (this.sensorTracking.checkAccelEvent(sensorEvent)) {
+                updateTarget();
             }
         }
-        if (active && !listeningForShake) {
+        if (active) { //not sure why this was disabled while listening: && !listeningForShake) {
+            // shouldn't hurt to also do this for every accel event
             this.sensorFactory.dispatch(sensorEvent);
         }
     }
@@ -669,83 +542,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         // We do not care about that
     }
 
-    /**/
-    public void changeSynthAmp(){
-        try {
-            superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", OscMessage.defaultNodeId}));
-            Location current = LatLngTOLocation(currentLocation);
-            Location target = LatLngTOLocation(targetLocation);
-
-            double distanceFt = current.distanceTo(target);
-            double amp = 0; //setting up minimum aplititude so we always know that the synth is working.
-            Log.d(Double.toString(distanceFt), "Amplitude synth");
-            if(distanceFt < MAX_DISTANCE){
-                if(distanceFt < MIN_DISTANCE)
-                    amp = 1;
-                else
-                    amp = 1 / distanceFt; //a negative slope fuction to ensure smooth increase
-            }
-
-            Log.d(Double.toString(amp), "Amplitude synth");
-            superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "amplitude", OscMessage.defaultNodeId, 0, 1, "amp", amp}));
-            setUpControls(); // now we have an audio engine, let the activity hook up its controls
-            if(SCAudio.hasMessages()){
-                OscMessage receivedMessage = SCAudio.getMessage();
-                Log.d(receivedMessage.get(0).toString(), "scydef message");
-            }
-        } catch (RemoteException e){
-            e.printStackTrace();
-        }
-    }
-
-    public void changeSynth(){
-        try {
-            //ScService.deliverDataFile(StartUpActivity.this, "frequency.scsyndef", ScService.getSynthDefsDirStr(StartUpActivity.this));
-            //superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
-            Location current = LatLngTOLocation(currentLocation);
-            Location target = LatLngTOLocation(targetLocation);
-            double distance = current.distanceTo(target);
-            double amp = 0.1;
-            double freq = 200; //setting up minimum frequency so we always know that the synth is working.
-            double scale = 1;
-            Log.d(Double.toString(distance), "Frequency synth");
-            if(distance < MAX_DISTANCE){
-                if(distance < MIN_DISTANCE) {
-                    freq = 800;
-                    scale = 0;
-                    initiateShakePopup();
-                }
-                else {
-                    freq = 800 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE)*200; //a negative slope fuction to ensure smooth increase
-                    scale = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
-                    amp = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
-                }
-            }
-            Toast.makeText(getApplicationContext(), "Scale: "+ scale, Toast.LENGTH_SHORT).show();
-            curr_frequency = freq;
-
-            Log.d(Double.toString(freq), "Frequency synth");
-            //superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "synth1", nodes[node], 0, 1, "freq", (float)freq}));
-            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "freq", (float)freq}));
-            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "amp", (float)amp}));
-
-            superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "dist", (float)scale}));
-
-            setUpControls(); // now we have an audio engine, let the activity hook up its controls
-            if(SCAudio.hasMessages()){
-                OscMessage receivedMessage = SCAudio.getMessage();
-                Log.d(receivedMessage.get(0).toString(), "scydef message");
-            }
-        } catch (RemoteException e){
-            e.printStackTrace();
-        }
-    }
-
     private void updateTarget() {
-        location_no++;
-        if (location_no > testTargetLocations.length)
-            location_no = 0;
-        targetLocation = testTargetLocations[location_no];
         addMarkers();
         closeShakePopup();
     }
@@ -754,7 +551,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     private void initiateShakePopup() {
         try {
-// We need to get the instance of the LayoutInflater
+            // We need to get the instance of the LayoutInflater
             LayoutInflater inflater = (LayoutInflater) StartUpActivity.this
                     .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
             View layout = inflater.inflate(R.layout.shake_popup,
@@ -766,7 +563,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
             Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             if (accelerometer != null) {
-                listeningForShake = true;
+                this.sensorTracking.listeningForShake = true;
                 sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
             }
 
@@ -799,8 +596,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         View view = compoundButton.getRootView();
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
-        node = 1001;
-
         for(SensorConfiguration sc : this.dispatcher.getSensorConfigurations()){
             sc.setSend(isChecked);
         }
@@ -814,16 +609,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 tv.append(s + "\n");
             }
             mapFragment.getMapAsync(this);
-            //MediaPlayer mp = MediaPlayer.create(this, );
             try {
-
-                superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "sonar", node, 0, 1}));
-                String soundFile = "a11wlk01.wav";
-                String synthName = "bufSticker";
-                int bufferIndex = 10;
-                superCollider.sendMessage(new OscMessage( new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(StartUpActivity.this) + "/" + soundFile}));
-                superCollider.sendMessage(new OscMessage( new Object[] {"s_new", synthName, node + 1, 0, 1, "bufnum", bufferIndex}));
-                superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "dist", 1f}));
+                this.soundManager.setupSynths(this);
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
@@ -831,32 +618,31 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         else{
             tv.setText("");
             try {
-                superCollider.sendMessage(new OscMessage( new Object[] {"n_free", node}));
-                superCollider.sendMessage(new OscMessage( new Object[] {"n_free", node + 1}));
+                this.soundManager.freeSynths();
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
-
         }
         active = isChecked;
     }
 
     public void addMarkers(){
         map.clear();
-        map.addMarker(new MarkerOptions().position(targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
-        map.addMarker(new MarkerOptions().position(currentLocation).title("Current Location").draggable(true));
-        map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15f));
+        map.addMarker(new MarkerOptions().position(
+                this.sensorTracking.targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+        map.addMarker(new MarkerOptions().position(
+                this.sensorTracking.currentLocation).title("Current Location").draggable(true));
+        map.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                this.sensorTracking.currentLocation, 15f));
     }
+
     public void onMapReady(GoogleMap map){
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10, 1, this);
         locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10, 1, this);
         if(this.map == null) {
             this.map = map;
-            addMarkers();
         }
-        else {
-            addMarkers();
-        }
+        addMarkers();
     }
 
     public List<Parameters> getSensors() {

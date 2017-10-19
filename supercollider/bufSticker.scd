@@ -1,3 +1,9 @@
+
+// the dist argument should be distance from goal, normalized from 0-1
+// you can manipulate pan based on angle, for instance (range -1.0, 1.0)
+// rate is automtically scaled by distance, but you can change the base rate from 1 to something else
+// amp can also be manipulated, typically 0-1, though it could go slightly higher in some cases
+// make sure that bufnum is set when the synth is launched - use a mono buf
 (
 SynthDef(\bufSticker, {|out = 0, bufnum, amp = 1, rate = 1, pan = 0, dist = 0|
     var read, sig, holdTrig, holdTime, posGate, repRate, smear, resetPos, phaseOut, trigem,
@@ -30,4 +36,16 @@ SynthDef(\bufSticker, {|out = 0, bufnum, amp = 1, rate = 1, pan = 0, dist = 0|
 }).store;
 )
 
+(
+s = Server.local;
+b = Buffer.read(s, Document.current.dir ++ "/testing-synths/aaa.wav");
+)
+
+(
+a = Synth("bufSticker", [\bufnum, b.bufnum]);
+)
+
+(
+a.set(\dist, 0.5);
+)
 

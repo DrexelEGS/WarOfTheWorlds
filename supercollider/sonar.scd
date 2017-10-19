@@ -1,3 +1,13 @@
+
+// With the defs that I sent, the only crucial arg is dist, which should be the distance from goal normalized between 0-1
+// (0 means you’re at the goal):
+// Pan is the stereo “panorama” and determines how much of the signal goes to each ear individually.
+// If you want to change the pan of the synths I sent, you want to first calculate the angle between the user and the goal
+// (it will have to wrap at 180 degrees, because we’re not using a 3D audio library that allows us to pan something
+// “behind” someone), then normalize that value between -1 and 1 (-1 is left ear, 1 is right ear, 0 is both [center]).
+// Then, you can set both the pan and dist at the same time:
+// /n_set, GroupNodeID, [“dist”, 0.6114, “pan”, -0.3341]
+
 (
 SynthDef(\sonar, {|dist=1.0, pan=0, amp = 0.2, out=0|
     var env, sine, verb;
@@ -6,5 +16,14 @@ SynthDef(\sonar, {|dist=1.0, pan=0, amp = 0.2, out=0|
     verb = GVerb.ar(sine, 80, 3, drylevel: dist.linlin(0.0, 1.0, 1.0, 0.2), taillevel: dist.linlin(0.0, 1.0, 0.2, 0.6));
     Out.ar(0, Pan2.ar(verb.mean, pan) * amp * dist.linlin(0, 1.0, 0.1, 1.0));
 }).store;
+)
+
+(
+a = Synth("sonar");
+)
+
+(
+a.set(\dist, 0.1);
+a.set(\pan, 0.9);
 )
 
