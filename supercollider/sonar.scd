@@ -18,3 +18,12 @@ SynthDef(\sonar, {|dist=1.0, pan=0, amp = 0.2, out=0|
 }).store;
 )
 
+(
+a = Synth("sonar");
+)
+
+(
+a.set(\dist, 0.1);
+a.set(\pan, 0.9);
+)
+
