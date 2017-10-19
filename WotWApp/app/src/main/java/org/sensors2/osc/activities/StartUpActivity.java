@@ -306,7 +306,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         setContentView(R.layout.activity_main);
-        //mainWidget = new TextView(this); //TODO: Find a way to get rid of this
+        mainWidget = new TextView(this); //TODO: Find a way to get rid of this
         bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
         this.settings = this.loadSettings();
         this.dispatcher = new OscDispatcher();
@@ -335,9 +335,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     }
 
-    protected void onDestroy(Bundle savedInstanceState) {
-    unbindService(conn);
-    }
+    //protected void onResume(Bundle savedInstanceState){ bindService(scIntent, conn, BIND_AUTO_CREATE); }
+    //protected void onPause(Bundle savedInstanceState){ unbindService(conn); }
+    //protected void onDestroy(Bundle savedInstanceState) {    unbindService(conn);    }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
         List<Parameters> parameters = new ArrayList<>();
@@ -616,6 +616,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             mAdapter.disableForegroundDispatch(this);
             mAdapter.disableForegroundNdefPush(this);
         }
+        //unbindService(conn);
     }
 
     @Override
