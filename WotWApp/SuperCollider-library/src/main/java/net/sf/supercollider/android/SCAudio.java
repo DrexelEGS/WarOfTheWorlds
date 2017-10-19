@@ -29,9 +29,9 @@ public class SCAudio extends Thread {
 	final int numOutChans = 1;
 	public static int sampleRateInHz = 44100;
 	// bufSizeFrames (size of audio buffer passed in from android) 
-	//  must be a multiple of 64 since scsynth's internal block length is unchanged from its default of 64.
+	// must be a multiple of 64 since scsynth's internal block length is unchanged from its default of 64.
 	// 64*16 was OK for 11kHz.
-	final int bufSizeFrames = 64*64;
+	final int bufSizeFrames = 2*64*64; // = 8192 current SC default
 	final int shortsPerSample = 1; // this is tied to what the NDK code does to pass audio to scsynth, can't change easily.
 	final int bufSizeShorts = bufSizeFrames * numOutChans * shortsPerSample; 
 
