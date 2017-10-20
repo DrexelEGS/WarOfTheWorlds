@@ -101,7 +101,7 @@ public class SCAudio extends Thread {
 	 * This is asynchronous.
 	 */
 	public void sendQuit(){
-		sendMessage(OscMessage.quitMessage());
+		sendMessage(OscMessage.createQuitMessage());
 		running = false;
 		closeUDP(); // sent early
 	}

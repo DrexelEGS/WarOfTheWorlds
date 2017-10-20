@@ -68,9 +68,8 @@ public class SuperColliderActivity extends Activity {
 			public boolean onTouch(View v, MotionEvent event) {
 				if (event.getAction()==MotionEvent.ACTION_UP) {
 					// OSC message right here!
-					OscMessage noteMessage = new OscMessage( new Object[] {
-							"/n_set", OscMessage.defaultNodeId, "amp", 0f
-					});
+					OscMessage noteMessage = OscMessage.createSetControlMessage(
+							OscMessage.defaultNodeId, "amp", 0f);
 					try {
 						// Now send it over the interprocess link to SuperCollider running as a Service
 						superCollider.sendMessage(noteMessage);
@@ -83,16 +82,14 @@ public class SuperColliderActivity extends Activity {
 					}
 				} else if ((event.getAction()==MotionEvent.ACTION_DOWN) || (event.getAction()==MotionEvent.ACTION_MOVE)) {
 					float vol = 1f - event.getY()/mainWidget.getHeight();
-					OscMessage noteMessage = new OscMessage( new Object[] {
-							"/n_set", OscMessage.defaultNodeId, "amp", vol
-					});
+					OscMessage noteMessage = OscMessage.createSetControlMessage(
+							OscMessage.defaultNodeId, "amp", vol);
 					//float freq = 150+event.getX();
 					//0 to mainWidget.getWidth() becomes sane-ish range of midinotes:
 					float midinote = event.getX() * (70.f / mainWidget.getWidth()) + 28.f;
 					float freq = sc_midicps(Math.round(midinote));
-					    OscMessage pitchMessage = new OscMessage( new Object[] {
-							"/n_set", OscMessage.defaultNodeId, "freq", freq
-					});
+					    OscMessage pitchMessage = OscMessage.createSetControlMessage(
+								OscMessage.defaultNodeId, "freq", freq);
 					try {
 						superCollider.sendMessage(noteMessage);
 						superCollider.sendMessage(pitchMessage);

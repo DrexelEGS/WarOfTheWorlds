@@ -49,29 +49,44 @@ public class SoundManager {
         }
         // Kick off the supercollider playback routine
         superCollider.start();
+        // basic communication setting for messages to the SC server:
+        superCollider.sendMessage(OscMessage.createErrorModeMessage());
+        superCollider.sendMessage(OscMessage.createNotifyMessage());
         printMessages();
     }
 
-    public void printMessages() {
-        if(SCAudio.hasMessages()){
-            OscMessage receivedMessage = SCAudio.getMessage();
-            Log.d(LOG_LABEL, "SC message: " + receivedMessage.get(0).toString());
+    protected void printMessages() {
+        Thread.yield();
+        if (SCAudio.hasMessages()) {
+            while (SCAudio.hasMessages()) {
+                OscMessage msgFromServer = SCAudio.getMessage();
+                Log.d(LOG_LABEL, "OSCMessage received: " + msgFromServer.toString());
+            }
+        } else {
+            Log.d(LOG_LABEL, "No OSCMessages received by SCAudio.");
         }
     }
 
     public void freeSynths() throws RemoteException {
-        superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node + 1}));
+        superCollider.sendMessage(OscMessage.createNodeFreeMessage(node));
+        superCollider.sendMessage(OscMessage.createNodeFreeMessage(node + 1));
+        printMessages();
     }
 
+    // TODO: should probably split out the allocRead setup of the buffer, as that will be
+    // re-done when moving targets, and maybe we should request a synced response and wait
+    // for it before we restart the synth that uses the buffer
+    // (but hopefully that will not be necessary)
+
     public void setupSynths(Context context) throws RemoteException {
-        superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "sonar", node, 0, 1}));
         String soundFile = "a11wlk01.wav";
         String synthName = "bufSticker";
         int bufferIndex = 10;
-        superCollider.sendMessage(new OscMessage( new Object[] {"/b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", synthName, node + 1, 0, 1, "bufnum", bufferIndex}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", node + 1, "dist", 1f}));
+        superCollider.sendMessage(OscMessage.createSynthMessage("sonar", node));
+        superCollider.sendMessage(OscMessage.createAllocReadMessage(bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile));
+        superCollider.sendMessage(OscMessage.createSynthMessage(synthName, node + 1).add("bufnum").add(bufferIndex));
+        superCollider.sendMessage(OscMessage.createSetControlMessage(node + 1, "dist", 1f));
+        printMessages();
     }
 
     public boolean changeSynth(double distance) throws RemoteException {
@@ -93,9 +108,9 @@ public class SoundManager {
                 amp = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
             }
         }
-        superCollider.sendMessage(OscMessage.setControl(node, "freq", (float) freq));
-        superCollider.sendMessage(OscMessage.setControl(node, "amp", (float) amp));
-        superCollider.sendMessage(OscMessage.setControl(node + 1, "dist", (float) scale));
+        superCollider.sendMessage(OscMessage.createSetControlMessage(node, "freq", (float) freq));
+        superCollider.sendMessage(OscMessage.createSetControlMessage(node, "amp", (float) amp));
+        superCollider.sendMessage(OscMessage.createSetControlMessage(node + 1, "dist", (float) scale));
         // string for debugging display:
         // TODO: check what is actually used so we display something useful here!
         currentParamStr = "Dist " + (float) scale;

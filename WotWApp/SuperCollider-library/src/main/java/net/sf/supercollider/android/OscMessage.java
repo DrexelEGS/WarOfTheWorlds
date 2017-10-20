@@ -10,10 +10,10 @@ import android.os.Parcelable;
  *  c++ later.
  * 
  * Simple case: The first add() to a new OscMessage must be a string /command, 
- *    the trailing arguments can be int, string or float
+ *    the trailing arguments can be int, long, string, float, or double
  * TODO: BROKEN! Compound case: All the adds must be OscMessages
  * 
- * The createSynthMessage() and noteMessage methods serve as examples
+ * The create___Message() methods serve as examples and for convenience
  * 
  * This object is eventually evaluated by scsynth_android_doOsc in JNI
  *  
@@ -29,64 +29,80 @@ public final class OscMessage implements Parcelable {
 	///////////////////////////////////////////////////////////////////////////
 	
 	public static OscMessage createGroupMessage(int nodeId, int addAction, int target) {
-		OscMessage theMessage = new OscMessage();
-		theMessage.add("/g_new");
-		theMessage.add(nodeId);
-		theMessage.add(addAction);
-		theMessage.add(target);
-		return theMessage;
+		return new OscMessage().add("/g_new").add(nodeId).add(addAction).add(target);
+	}
+	public static OscMessage createGroupMessage(int nodeId) {
+		// default to add as head of default group:
+		return createGroupMessage(nodeId, 0, 1);
 	}
 
 	public static OscMessage createSynthMessage(String name, int nodeId, int addAction, int target) {
-		OscMessage theMessage = new OscMessage();
-		theMessage.add("/s_new");
-		theMessage.add(name);
-		theMessage.add(nodeId);
-		theMessage.add(addAction);
-		theMessage.add(target);
-		return theMessage;
+		return new OscMessage().add("/s_new").add(name).add(nodeId).add(addAction).add(target);
 	}
-	
+	public static OscMessage createSynthMessage(String name, int nodeId) {
+		// default to add as head of default group:
+		return createSynthMessage(name, nodeId, 0, 1);
+	}
+
+	public static OscMessage createNodeFreeMessage(int nodeId) {
+		return new OscMessage().add("/n_free").add(nodeId);
+	}
+
+	public static OscMessage createSetControlMessage(int nodeId, String control, float value) {
+		return new OscMessage().add("/n_set").add(nodeId).add(control).add(value);
+	}
+
+	public static OscMessage createAllocReadMessage(int bufferId, String filePath) {
+		return new OscMessage().add("/b_allocRead").add(bufferId).add(filePath);
+	}
+
+	public static OscMessage createBufferFreeMessage(int bufferId) {
+		return new OscMessage().add("/b_free").add(bufferId);
+	}
+
+	public static OscMessage createNotifyMessage(int mode) {
+		return new OscMessage().add("/notify").add(mode);
+	}
+	public static OscMessage createNotifyMessage() {
+		// default to enabling notifications:
+		return createNotifyMessage(1);
+	}
+
+	public static OscMessage createErrorModeMessage(int mode) {
+		return new OscMessage().add("/error").add(mode);
+	}
+	public static OscMessage createErrorModeMessage() {
+		// default to enabling global error reporting:
+		return createErrorModeMessage(1);
+	}
+
+    public static OscMessage createSyncMessage(int syncId) {
+        return new OscMessage().add("/sync").add(syncId);
+    }
+    public static OscMessage createSyncMessage() {
+        // default to requesting a sync ID of 0 in the response:
+        return createSyncMessage(0);
+    }
+
+	/*
+	 * NOTE: it is better not to send a plain /quit message yourself,
+	 * instead call SCAudio.sendQuit() which tidies up the java part of the audio too.
+	 */
+	public static OscMessage createQuitMessage() {
+		return new OscMessage().add("/quit");
+	}
+
 	// TODO: This message seems to be getting parsed by doOsc, but it
 	// doesn't affect the output.  What's that all about then eh?
-	public static OscMessage noteMessage(int note, int velocity) {
-	    OscMessage retval =  new OscMessage();
-	    
-	    OscMessage notebundle = new OscMessage();
-	    notebundle.add("/n_set");
-	    notebundle.add(defaultNodeId);
-		notebundle.add("/note");
-	    notebundle.add(note);
-
-	    OscMessage velbundle = new OscMessage();
-		velbundle.add("/n_set");
-	    velbundle.add(defaultNodeId);
-		velbundle.add("/velocity");
-	    velbundle.add(velocity);
-
-	    retval.add(notebundle);
-	    retval.add(velbundle);
-	    return retval;
+	/* (commented out as it is a very specific and node dependent message using the default id)
+	public static OscMessage createNoteMessage(int note, int velocity) {
+	    OscMessage notebundle = new OscMessage().add("/n_set")
+				.add(defaultNodeId).add("note").add(note);
+	    OscMessage velbundle = new OscMessage().add("/n_set")
+				.add(defaultNodeId).add("velocity").add(velocity);
+		return new OscMessage().add(notebundle).add(velbundle);
 	}
-	
-	public static OscMessage setControl(int node,String control,float value) {
-		OscMessage controlValue = new OscMessage();
-		controlValue.add("/n_set");
-		controlValue.add(node);
-		controlValue.add(control);
-		controlValue.add(value);
-		return controlValue;
-	}
-	
-	/*
-	 * NOTE: it is better not to send a plain quit() message yourself, 
-	 * instead call SCAudio.sendQuit() which tidies up the java part of the audio too. 
 	 */
-	public static OscMessage quitMessage() {
-		OscMessage theMessage = new OscMessage();
-		theMessage.add("/quit");
-		return theMessage;
-	}
 
 	///////////////////////////////////////////////////////////////////////////
 	// The actual OscMessage implementation
@@ -109,14 +125,24 @@ public final class OscMessage implements Parcelable {
 			else if (token instanceof String) add ((String) token);
 		}
 	}
-	public boolean add(int i) { return message.add(i); }
-	public boolean add(float f) { return message.add(f); }
-	public boolean add(double d) { return message.add(d); }
-	public boolean add(String s) { return message.add(s); }
-	public boolean add(long ii) {return message.add(ii); }
-	public boolean add(OscMessage m) {return message.add(m);}
+	public OscMessage add(int i) { message.add(i); return this; }
+	public OscMessage add(float f) { message.add(f); return this; }
+	public OscMessage add(double d) { message.add(d); return this; }
+	public OscMessage add(String s) { message.add(s); return this; }
+	public OscMessage add(long ii) { message.add(ii); return this; }
+	public OscMessage add(OscMessage m) { message.add(m); return this; }
+
+	// void-returning add methods used from C-code to simplify marshalling
+	// c-code doesn't need the convenience of the .add(x).add(y).add(z) builder pattern
+	public void vadd(int i) { message.add(i); }
+	public void vadd(float f) { message.add(f); }
+	public void vadd(double d) { message.add(d); }
+	public void vadd(String s) { message.add(s); }
+	public void vadd(long ii) { message.add(ii); }
+	public void vadd(OscMessage m) { message.add(m); }
+
 	public Object[] toArray() { return message.toArray(); }
-	
+
 	/**
 	 * Convenient string representation for debugging
 	 */
