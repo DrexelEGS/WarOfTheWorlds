@@ -79,50 +79,39 @@ public class NativeAudioTests {
 		AudioTrack audioTrack = createAudioOut(); // audible testing
 		try {
 			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"error", 1});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/error", 1});
 			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"notify", 1});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/notify", 1});
 			Thread.yield(); printMessages();
 	    	///////////////////////////////////////////////////////////////////////
 	    	// test default.scsyndef
-			//SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "default", OscMessage.defaultNodeId});
+			//SCAudio.scsynth_android_doOsc(new Object[] {"/s_new", "default", OscMessage.defaultNodeId});
 
 			//for(int i=0; i<buffersPerSecond; ++i) {
 			//	SCAudio.scsynth_android_genaudio(audioBuf);
 			//	audioTrack.write(audioBuf, 0, bufSizeShorts);
 			//}
-			//SCAudio.scsynth_android_doOsc(new Object[] {"n_free", OscMessage.defaultNodeId});
-			SCAudio.scsynth_android_doOsc(new Object[] {"g_new", 1, 0, 0});
+			//SCAudio.scsynth_android_doOsc(new Object[] {"/n_free", OscMessage.defaultNodeId});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/g_new", 1, 0, 0});
 			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"sync"});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/sync"});
 			Thread.yield(); printMessages();
 
 			///////////////////////////////////////////////////////////////////////
 	    	// Test buffers
 			int bufferIndex = 10;
-			//SCAudio.scsynth_android_doOsc(new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(getContext()) + "/aaa.wav"});
-			SCAudio.scsynth_android_doOsc(new Object[] {"b_alloc", bufferIndex, 44100 * 3});
+			//SCAudio.scsynth_android_doOsc(new Object[] {"/b_allocRead", bufferIndex, ScService.getSoundsDirStr(getContext()) + "/aaa.wav"});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/b_alloc", bufferIndex, 44100 * 3});
 			Thread.yield(); printMessages();
 			try {
 				Thread.sleep(1000);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-			//SCAudio.scsynth_android_doOsc(new Object[] {"b_gen", bufferIndex, "sine1", 1, 1.0f, 0.5f, 0.3f});
-			SCAudio.scsynth_android_doOsc(new Object[] {"b_read", bufferIndex, ScService.getSoundsDirStr(getContext()) + "/aaa.au", 0, 10000});
+			//SCAudio.scsynth_android_doOsc(new Object[] {"/b_gen", bufferIndex, "sine1", 1, 1.0f, 0.5f, 0.3f});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/b_read", bufferIndex, ScService.getSoundsDirStr(getContext()) + "/aaa.au", 0, 10000});
 			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"sync"});
-			Thread.yield(); printMessages();
-
-			for(int i=0; i<buffersPerSecond; ++i) {
-				SCAudio.scsynth_android_genaudio(audioBuf);
-				audioTrack.write(audioBuf, 0, bufSizeShorts);
-			}
-			Thread.yield(); printMessages();
-
-			SCAudio.scsynth_android_doOsc(new Object[] {"b_query", bufferIndex});
-			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"b_getn", bufferIndex, 100, 100});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/sync"});
 			Thread.yield(); printMessages();
 
 			for(int i=0; i<buffersPerSecond; ++i) {
@@ -131,13 +120,9 @@ public class NativeAudioTests {
 			}
 			Thread.yield(); printMessages();
 
-			SCAudio.scsynth_android_doOsc(new Object[] {"s_new", "PlayABuffer", OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/b_query", bufferIndex});
 			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"sync"});
-			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"n_run", OscMessage.defaultNodeId, 1});
-			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"sync"});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/b_getn", bufferIndex, 100, 100});
 			Thread.yield(); printMessages();
 
 			for(int i=0; i<buffersPerSecond; ++i) {
@@ -146,11 +131,26 @@ public class NativeAudioTests {
 			}
 			Thread.yield(); printMessages();
 
-			SCAudio.scsynth_android_doOsc(new Object[] {"n_free", OscMessage.defaultNodeId});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/s_new", "PlayABuffer", OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex});
 			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"b_free", bufferIndex});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/sync"});
 			Thread.yield(); printMessages();
-			SCAudio.scsynth_android_doOsc(new Object[] {"sync"});
+			SCAudio.scsynth_android_doOsc(new Object[] {"/n_run", OscMessage.defaultNodeId, 1});
+			Thread.yield(); printMessages();
+			SCAudio.scsynth_android_doOsc(new Object[] {"/sync"});
+			Thread.yield(); printMessages();
+
+			for(int i=0; i<buffersPerSecond; ++i) {
+				SCAudio.scsynth_android_genaudio(audioBuf);
+				audioTrack.write(audioBuf, 0, bufSizeShorts);
+			}
+			Thread.yield(); printMessages();
+
+			SCAudio.scsynth_android_doOsc(new Object[] {"/n_free", OscMessage.defaultNodeId});
+			Thread.yield(); printMessages();
+			SCAudio.scsynth_android_doOsc(new Object[] {"/b_free", bufferIndex});
+			Thread.yield(); printMessages();
+			SCAudio.scsynth_android_doOsc(new Object[] {"/sync"});
 			Thread.yield(); printMessages();
 
 			for(int i=0; i<buffersPerSecond; ++i) {

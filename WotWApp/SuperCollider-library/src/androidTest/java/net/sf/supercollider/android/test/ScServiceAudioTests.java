@@ -62,15 +62,15 @@ public class ScServiceAudioTests {
 			// start it manually (which is unusual for bound services, but that seems to be necessary:
 			servStub.start();
 			// Check it's working:
-			servStub.sendMessage(new OscMessage(new Object[] {"s_new", "default", OscMessage.defaultNodeId}));
+			servStub.sendMessage(new OscMessage(new Object[] {"/s_new", "default", OscMessage.defaultNodeId}));
 			Thread.sleep(1000);
-			servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
+			servStub.sendMessage(new OscMessage(new Object[] {"/n_free", OscMessage.defaultNodeId}));
 			initWavFile();
 			int bufferIndex = 10;
-			servStub.sendMessage(new OscMessage(new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/a11wlk01.wav"}));
+			servStub.sendMessage(new OscMessage(new Object[] {"/b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/a11wlk01.wav"}));
 			Thread.sleep(1000);
-			servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
-			//servStub.sendMessage(new OscMessage(new Object[] {"b_free", bufferIndex}));
+			servStub.sendMessage(new OscMessage(new Object[] {"/n_free", OscMessage.defaultNodeId}));
+			//servStub.sendMessage(new OscMessage(new Object[] {"/b_free", bufferIndex}));
 		} catch (RemoteException e) {
 			e.printStackTrace();
 		    assertTrue("RemoteException caught!", false);

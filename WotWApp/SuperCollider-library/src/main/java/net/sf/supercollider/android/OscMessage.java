@@ -71,7 +71,7 @@ public final class OscMessage implements Parcelable {
 	
 	public static OscMessage setControl(int node,String control,float value) {
 		OscMessage controlValue = new OscMessage();
-		controlValue.add("n_set");
+		controlValue.add("/n_set");
 		controlValue.add(node);
 		controlValue.add(control);
 		controlValue.add(value);
@@ -104,12 +104,14 @@ public final class OscMessage implements Parcelable {
 		for (Object token : message) {
 			if (token instanceof Integer) add ((Integer) token);
 			else if (token instanceof Float) add((Float) token);
+			else if (token instanceof Double) add((Double) token);
 			else if (token instanceof Long) add((Long) token);
 			else if (token instanceof String) add ((String) token);
 		}
 	}
 	public boolean add(int i) { return message.add(i); }
 	public boolean add(float f) { return message.add(f); }
+	public boolean add(double d) { return message.add(d); }
 	public boolean add(String s) { return message.add(s); }
 	public boolean add(long ii) {return message.add(ii); }
 	public boolean add(OscMessage m) {return message.add(m);}

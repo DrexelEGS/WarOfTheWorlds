@@ -68,37 +68,37 @@ public class SuperCollAsLibraryTest {
             servStub.start();
             assertTrue("Failed to find default file copied: " + fileToCheck,
                     Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
-            servStub.sendMessage(new OscMessage(new Object[] {"error", 1}));
-            servStub.sendMessage(new OscMessage(new Object[] {"notify", 1}));
-            servStub.sendMessage(new OscMessage(new Object[] {"g_new", 1, 0, 0}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/error", 1}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/notify", 1}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/g_new", 1, 0, 0}));
             printMessages();
             // Check it's working:
-            servStub.sendMessage(new OscMessage(new Object[] {"s_new", "default", OscMessage.defaultNodeId}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/s_new", "default", OscMessage.defaultNodeId}));
             Thread.sleep(1000);
-            servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
-            servStub.sendMessage(new OscMessage(new Object[] {"sync"}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/n_free", OscMessage.defaultNodeId}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/sync"}));
             int bufferIndex = 10;
-            servStub.sendMessage(new OscMessage(new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile}));
-            //servStub.sendMessage(new OscMessage(new Object[] {"b_alloc", bufferIndex, 44100 * 3}));
-            //servStub.sendMessage(new OscMessage(new Object[] {"b_read", bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile, 0, 10000}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile}));
+            //servStub.sendMessage(new OscMessage(new Object[] {"/b_alloc", bufferIndex, 44100 * 3}));
+            //servStub.sendMessage(new OscMessage(new Object[] {"/b_read", bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile, 0, 10000}));
 
-            servStub.sendMessage(new OscMessage(new Object[] {"sync"}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/sync"}));
             printMessages();
             Thread.sleep(1000);
             printMessages();
-            servStub.sendMessage(new OscMessage(new Object[] {"b_query", bufferIndex}));
-            servStub.sendMessage(new OscMessage(new Object[] {"b_getn", bufferIndex, 100, 100}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/b_query", bufferIndex}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/b_getn", bufferIndex, 100, 100}));
             Thread.sleep(1000);
             printMessages();
-            servStub.sendMessage(new OscMessage(new Object[] {"s_new", synthName, OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex}));
-            servStub.sendMessage(new OscMessage(new Object[] {"sync"}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/s_new", synthName, OscMessage.defaultNodeId, 0, 1, "bufnum", bufferIndex}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/sync"}));
             Thread.sleep(3000);
             printMessages();
-            servStub.sendMessage(new OscMessage(new Object[] {"n_free", OscMessage.defaultNodeId}));
-            servStub.sendMessage(new OscMessage(new Object[] {"sync"}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/n_free", OscMessage.defaultNodeId}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/sync"}));
             printMessages();
-            servStub.sendMessage(new OscMessage(new Object[] {"b_free", bufferIndex}));
-            servStub.sendMessage(new OscMessage(new Object[] {"sync"}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/b_free", bufferIndex}));
+            servStub.sendMessage(new OscMessage(new Object[] {"/sync"}));
         } catch (RemoteException e) {
             e.printStackTrace();
             assertTrue("RemoteException caught!", false);

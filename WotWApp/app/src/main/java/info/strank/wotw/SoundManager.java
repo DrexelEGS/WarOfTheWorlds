@@ -60,18 +60,18 @@ public class SoundManager {
     }
 
     public void freeSynths() throws RemoteException {
-        superCollider.sendMessage(new OscMessage( new Object[] {"n_free", node}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"n_free", node + 1}));
+        superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node}));
+        superCollider.sendMessage(new OscMessage( new Object[] {"/n_free", node + 1}));
     }
 
     public void setupSynths(Context context) throws RemoteException {
-        superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "sonar", node, 0, 1}));
+        superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", "sonar", node, 0, 1}));
         String soundFile = "a11wlk01.wav";
         String synthName = "bufSticker";
         int bufferIndex = 10;
-        superCollider.sendMessage(new OscMessage( new Object[] {"b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"s_new", synthName, node + 1, 0, 1, "bufnum", bufferIndex}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "dist", 1f}));
+        superCollider.sendMessage(new OscMessage( new Object[] {"/b_allocRead", bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile}));
+        superCollider.sendMessage(new OscMessage( new Object[] {"/s_new", synthName, node + 1, 0, 1, "bufnum", bufferIndex}));
+        superCollider.sendMessage(new OscMessage( new Object[] {"/n_set", node + 1, "dist", 1f}));
     }
 
     public boolean changeSynth(double distance) throws RemoteException {
@@ -93,9 +93,9 @@ public class SoundManager {
                 amp = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
             }
         }
-        superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "freq", (float)freq}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node, "amp", (float)amp}));
-        superCollider.sendMessage(new OscMessage( new Object[] {"n_set", node + 1, "dist", (float)scale}));
+        superCollider.sendMessage(OscMessage.setControl(node, "freq", (float) freq));
+        superCollider.sendMessage(OscMessage.setControl(node, "amp", (float) amp));
+        superCollider.sendMessage(OscMessage.setControl(node + 1, "dist", (float) scale));
         // string for debugging display:
         // TODO: check what is actually used so we display something useful here!
         currentParamStr = "Dist " + (float) scale;
