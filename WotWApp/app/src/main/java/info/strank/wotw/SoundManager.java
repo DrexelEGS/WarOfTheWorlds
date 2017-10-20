@@ -20,7 +20,7 @@ import java.io.IOException;
 
 public class SoundManager {
 
-    final String LOG_LABEL = "WotW.SensorTracking";
+    final String LOG_LABEL = "WotW.SoundManager";
 
     int node = 1001;
     final double MAX_DISTANCE = 100;
@@ -65,7 +65,7 @@ public class SoundManager {
     }
 
     public void setupSynths(Context context) throws RemoteException {
-        //superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "sonar", node, 0, 1}));
+        superCollider.sendMessage(new OscMessage( new Object[] {"s_new", "sonar", node, 0, 1}));
         String soundFile = "a11wlk01.wav";
         String synthName = "bufSticker";
         int bufferIndex = 10;
