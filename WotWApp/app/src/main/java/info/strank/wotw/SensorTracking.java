@@ -20,6 +20,11 @@ public class SensorTracking {
 
     final String LOG_LABEL = "WotW.SensorTracking";
 
+    private static final double MIN_LAT = 39.944933;
+    private static final double MAX_LAT = 39.95785;
+    private static final double MIN_LNG = -75.227379;
+    private static final double MAX_LNG = -75.18528;
+
     private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
     private static final int MIN_TIME_BETWEEN_SHAKES_MILLISECS = 1000;
     private static final LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
@@ -45,7 +50,7 @@ public class SensorTracking {
         double latitude = location.getLatitude();
         double longitude = location.getLongitude();
         String debugStr = "GPS Location Changed. Lat: " + latitude + " Lng: " + longitude;
-        if ((latitude > 39 && latitude < 41) && (longitude > -76 && longitude < -74)) {
+        if ((latitude > MIN_LAT && latitude < MAX_LAT) && (longitude > MIN_LNG && longitude < MAX_LNG)) {
             currentLocation = new LatLng(latitude, longitude);
         } else {
             debugStr = "OUTSIDE target area: " + debugStr;
