@@ -226,8 +226,8 @@ extern "C" int scsynth_android_start(JNIEnv* env, jobject obj,
 	options.mMaxGraphDefs = 512;
 	options.mMaxWireBufs = 512;
 	options.mNumAudioBusChannels = 32;
-	options.mRealTimeMemorySize = 512;
-	options.mNumRGens = 16;
+	options.mRealTimeMemorySize = 8192; // reducing this too much may lead to out of memory errors
+	options.mNumRGens = 32;
 	options.mLoadGraphDefs = 1;
 	options.mVerbosity = 2; // TODO: reduce this back to zero for non-debug builds once dev't is stable
 	options.mBufLength = 64; // was hwBufSize / numOutChans;
