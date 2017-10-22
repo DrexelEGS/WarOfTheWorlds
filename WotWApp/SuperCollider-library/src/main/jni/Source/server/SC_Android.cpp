@@ -85,10 +85,11 @@ jobject convertMessageToJava(JNIEnv* myEnv, char* inData, int inSize) {
 	}
 
 	jobject oscObject = myEnv->NewObject(oscMessageClass, oscConstructor);
-	jmethodID addInt = myEnv->GetMethodID(oscMessageClass, "add", "(I)Z");
-	jmethodID addStr = myEnv->GetMethodID(oscMessageClass, "add", "(Ljava/lang/String;)Z");
-	jmethodID addFlt = myEnv->GetMethodID(oscMessageClass, "add", "(F)Z");
-	jmethodID addLng = myEnv->GetMethodID(oscMessageClass, "add", "(J)Z");
+	jmethodID addInt = myEnv->GetMethodID(oscMessageClass, "vadd", "(I)V");
+	jmethodID addStr = myEnv->GetMethodID(oscMessageClass, "vadd", "(Ljava/lang/String;)V");
+	jmethodID addFlt = myEnv->GetMethodID(oscMessageClass, "vadd", "(F)V");
+    jmethodID addDbl = myEnv->GetMethodID(oscMessageClass, "vadd", "(D)V");
+	jmethodID addLng = myEnv->GetMethodID(oscMessageClass, "vadd", "(J)V");
 
 	// Did I steal this wholesale from dumpOSCmsg?  Yes I did.  -ajs 20100826
 	const char * data;
@@ -98,11 +99,11 @@ jobject convertMessageToJava(JNIEnv* myEnv, char* inData, int inSize) {
 		data = OSCstrskip(inData);
 		size = inSize - (data - inData);
 		jstring jaddr = myEnv->NewStringUTF(addr);
-		myEnv->CallBooleanMethod(oscObject,addStr,jaddr);
+		myEnv->CallVoidMethod(oscObject,addStr,jaddr);
 	}
 	else
 	{
-		myEnv->CallBooleanMethod(oscObject,addInt,OSCint(inData));
+		myEnv->CallVoidMethod(oscObject,addInt,OSCint(inData));
 		data = inData + 4;
 		size = inSize - 4;
 	}
@@ -117,14 +118,17 @@ jobject convertMessageToJava(JNIEnv* myEnv, char* inData, int inSize) {
 		switch(c)
 		{
 			case 'i' :
-				myEnv->CallBooleanMethod(oscObject,addInt,msg.geti());
+				myEnv->CallVoidMethod(oscObject,addInt,msg.geti());
 				break;
 			case 'f' :
-				myEnv->CallBooleanMethod(oscObject,addFlt,msg.getf());
+				myEnv->CallVoidMethod(oscObject,addFlt,msg.getf());
 				break;
+            case 'd' :
+                myEnv->CallVoidMethod(oscObject,addDbl,msg.getd());
+                break;
 			case 's' :
 				jstr = myEnv->NewStringUTF(msg.gets());
-				myEnv->CallBooleanMethod(oscObject,addStr,jstr);
+				myEnv->CallVoidMethod(oscObject,addStr,jstr);
 				break;
 			default :
 				scprintf("convertMessageToJava unknown/unimplemented tag '%c' 0x%02x", isprint(c)?c:'?', (unsigned char)c & 255);
