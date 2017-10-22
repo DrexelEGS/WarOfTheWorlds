@@ -51,6 +51,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import net.sf.supercollider.android.ISuperCollider;
+import net.sf.supercollider.android.SuperColliderActivity;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -164,7 +165,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         //@Override
         public void onServiceDisconnected(ComponentName name) {
             // TODO: should we call stop here? (which also sends a quit message)
-            //superCollider.stop();
+            // I blieve we should. hence I added a stop here. It does reduce a few errors
+            try {
+                if(StartUpActivity.this.soundManager.superCollider != null)
+                    StartUpActivity.this.soundManager.superCollider.stop();
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
             //StartUpActivity.this.soundManager.shutDown();
         }
     }
@@ -193,7 +200,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
         this.locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         setContentView(R.layout.activity_main);
-        mainWidget = new TextView(this); //TODO: Find a way to get rid of this
+        //mainWidget = new TextView(this); //TODO: Find a way to get rid of this
         bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
         this.settings = this.loadSettings();
         this.dispatcher = new OscDispatcher();
@@ -485,6 +492,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
 
         }
+        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
     }
 
     @Override
@@ -503,7 +511,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             mAdapter.disableForegroundDispatch(this);
             mAdapter.disableForegroundNdefPush(this);
         }
-        //unbindService(conn);
+        unbindService(conn);
     }
 
     @Override
@@ -513,7 +521,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         try {
             // TODO: we should probably do this, not sure why it is commented out here:
             // Free up audio when the activity is not in the foreground
-            // if (superCollider!=null) superCollider.stop();
+            if (StartUpActivity.this.soundManager.superCollider!=null)
+                StartUpActivity.this.soundManager.superCollider.stop();
             this.finish();
         } catch (Exception re) {
             re.printStackTrace();
