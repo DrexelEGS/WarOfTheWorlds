@@ -48,9 +48,5 @@
     <string name="text_guide_headline">Ajuda</string>
     <string name="host">Host</string>
     <string name="sensor_nfc">Near Field Communication (NFC)</string>
-    <string name="text_guide_multitouch_headline">Multitouch</string>
-    <string name="text_guide_nfc_headline">Near Field Communication (NFC)</string>
     <string name="sensor_wrist_tilt_gesture">Gesto de inclinação do pulso</string>
-    <string name="text_guide_multitouch">Se você habilitar multitouch, cada ponto de contato enviará suas coordenadas via OSC. O endereço está no formato /touch&lt;index&gt;/X e /touchindex&gt;/Y, onde o índice é baseado em 1.</string>
-    <string name="text_guide_nfc">Se o seu telefone pode ler tokens NFC, o valor desses tokens será enviado para o endereço OSC /nfc.</string>
 </resources>

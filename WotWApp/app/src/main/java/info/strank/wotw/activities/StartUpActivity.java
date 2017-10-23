@@ -2,8 +2,6 @@ package info.strank.wotw.activities;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
-import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -16,16 +14,9 @@ import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.nfc.NdefMessage;
-import android.nfc.NdefRecord;
-import android.nfc.NfcAdapter;
-import android.nfc.Tag;
-import android.nfc.tech.MifareClassic;
-import android.nfc.tech.MifareUltralight;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.Parcelable;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.preference.PreferenceManager;
@@ -38,7 +29,6 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -49,7 +39,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import net.sf.supercollider.android.ISuperCollider;
-import net.sf.supercollider.android.SuperColliderActivity;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -57,13 +46,9 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
-
 import org.sensors2.common.dispatch.DataDispatcher;
-import org.sensors2.common.dispatch.Measurement;
-import org.sensors2.common.nfc.NfcActivity;
 import org.sensors2.common.sensors.Parameters;
 import org.sensors2.common.sensors.SensorActivity;
 import org.sensors2.common.sensors.SensorCommunication;
@@ -71,20 +56,17 @@ import info.strank.wotw.R;
 import info.strank.wotw.dispatch.OscConfiguration;
 import info.strank.wotw.dispatch.OscDispatcher;
 import info.strank.wotw.dispatch.SensorConfiguration;
-import info.strank.wotw.fragments.MultiTouchFragment;
 import info.strank.wotw.fragments.SensorFragment;
 import info.strank.wotw.fragments.StartupFragment;
 import info.strank.wotw.sensors.Settings;
 
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 import info.strank.wotw.SensorTracking;
 import info.strank.wotw.SoundManager;
 
-public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, NfcActivity, CompoundButton.OnCheckedChangeListener, View.OnTouchListener, LocationListener {
+public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, CompoundButton.OnCheckedChangeListener, LocationListener {
 
     final String LOG_LABEL = "StartUpActivity";
     // WotW specific tracking and sound generation:
@@ -99,15 +81,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private PowerManager.WakeLock wakeLock;
     private boolean active;
     private GoogleMap map;
-    private Marker marker;
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
-    private TextView mainWidget = null;
     private ServiceConnection conn = new ScServiceConnection();
-
-    private NfcAdapter mAdapter;
-    private PendingIntent mPendingIntent;
-    private NdefMessage mNdefPushMessage;
 
     public Settings getSettings() {
         return this.settings;
@@ -266,7 +242,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (active && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
         }
-        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
     }
 
     @Override
@@ -280,7 +255,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (this.wakeLock.isHeld()) {
             this.wakeLock.release();
         }
-        unbindService(conn);
     }
 
     @Override
@@ -295,7 +269,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onDestroy() {
         Log.d(LOG_LABEL, "onDestroy ACTIVITY LIFECYCLE");
         super.onDestroy();
-        // unbindService(conn); // should we ???
+        unbindService(conn);
     }
 
     /**
@@ -304,192 +278,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
         List<Parameters> parameters = new ArrayList<>();
-
-        // add Nfc sensor
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD_MR1) {
-            mAdapter = NfcAdapter.getDefaultAdapter(this);
-            if (mAdapter != null && mAdapter.isEnabled()) {
-                parameters.add(new info.strank.wotw.sensors.Parameters(mAdapter, this.getApplicationContext()));
-            }
-        }
-
         // add device sensors
         for (Sensor sensor : sensorManager.getSensorList(Sensor.TYPE_ALL)) {
             parameters.add(new info.strank.wotw.sensors.Parameters(sensor, this.getApplicationContext()));
         }
         return parameters;
-    }
-
-    public NfcAdapter getNfcAdapter() {
-        return this.mAdapter;
-    }
-
-    @TargetApi(10)
-    private NdefRecord newTextRecord(String text, Locale locale, boolean encodeInUtf8) {
-        byte[] langBytes = locale.getLanguage().getBytes(Charset.forName("US-ASCII"));
-
-        Charset utfEncoding = encodeInUtf8 ? Charset.forName("UTF-8") : Charset.forName("UTF-16");
-        byte[] textBytes = text.getBytes(utfEncoding);
-
-        int utfBit = encodeInUtf8 ? 0 : (1 << 7);
-        char status = (char) (utfBit + langBytes.length);
-
-        byte[] data = new byte[1 + langBytes.length + textBytes.length];
-        data[0] = (byte) status;
-        System.arraycopy(langBytes, 0, data, 1, langBytes.length);
-        System.arraycopy(textBytes, 0, data, 1 + langBytes.length, textBytes.length);
-
-        return new NdefRecord(NdefRecord.TNF_WELL_KNOWN, NdefRecord.RTD_TEXT, new byte[0], data);
-    }
-
-    @TargetApi(10)
-    private void resolveIntent(Intent intent) {
-        String action = intent.getAction();
-        if (NfcAdapter.ACTION_TAG_DISCOVERED.equals(action)
-                || NfcAdapter.ACTION_TECH_DISCOVERED.equals(action)
-                || NfcAdapter.ACTION_NDEF_DISCOVERED.equals(action)) {
-            Parcelable[] rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
-            NdefMessage[] msgs;
-            if (rawMsgs != null) {
-                byte[] empty = new byte[0];
-                byte[] id = intent.getByteArrayExtra(NfcAdapter.EXTRA_ID);
-                byte[] payload = new byte[0];
-                NdefRecord record = new NdefRecord(NdefRecord.TNF_UNKNOWN, empty, id, payload);
-                NdefMessage msg = new NdefMessage(new NdefRecord[]{record});
-                msgs = new NdefMessage[]{msg};
-//                msgs = new NdefMessage[rawMsgs.length];
-//                for (int i = 1; i <= rawMsgs.length; i++) {
-//                    msgs[i] = (NdefMessage) rawMsgs[i-1];
-//                }
-            } else {
-                // Unknown tag type
-                byte[] empty = new byte[0];
-                byte[] id = intent.getByteArrayExtra(NfcAdapter.EXTRA_ID);
-                Parcelable tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
-                byte[] payload = dumpTagData(tag).getBytes();
-                NdefRecord record = new NdefRecord(NdefRecord.TNF_UNKNOWN, empty, id, payload);
-                NdefMessage msg = new NdefMessage(new NdefRecord[]{record});
-                msgs = new NdefMessage[]{msg};
-            }
-            // Setup the views
-            for (NdefMessage msg : msgs) {
-                if (active) {
-                    this.sensorFactory.dispatch(msg);
-                }
-            }
-        }
-    }
-
-    @TargetApi(10)
-    private String dumpTagData(Parcelable p) {
-        StringBuilder sb = new StringBuilder();
-        Tag tag = (Tag) p;
-        byte[] id = tag.getId();
-        sb.append("Tag ID (hex): ").append(getHex(id)).append("\n");
-        sb.append("Tag ID (dec): ").append(getDec(id)).append("\n");
-        sb.append("ID (reversed): ").append(getReversed(id)).append("\n");
-
-        String prefix = "android.nfc.tech.";
-        sb.append("Technologies: ");
-        for (String tech : tag.getTechList()) {
-            sb.append(tech.substring(prefix.length()));
-            sb.append(", ");
-        }
-        sb.delete(sb.length() - 2, sb.length());
-        for (String tech : tag.getTechList()) {
-            if (tech.equals(MifareClassic.class.getName())) {
-                sb.append('\n');
-                MifareClassic mifareTag = MifareClassic.get(tag);
-                String type = "Unknown";
-                switch (mifareTag.getType()) {
-                    case MifareClassic.TYPE_CLASSIC:
-                        type = "Classic";
-                        break;
-                    case MifareClassic.TYPE_PLUS:
-                        type = "Plus";
-                        break;
-                    case MifareClassic.TYPE_PRO:
-                        type = "Pro";
-                        break;
-                }
-                sb.append("Mifare Classic type: ");
-                sb.append(type);
-                sb.append('\n');
-
-                sb.append("Mifare size: ");
-                sb.append(mifareTag.getSize());
-                sb.append(" bytes");
-                sb.append('\n');
-
-                sb.append("Mifare sectors: ");
-                sb.append(mifareTag.getSectorCount());
-                sb.append('\n');
-
-                sb.append("Mifare blocks: ");
-                sb.append(mifareTag.getBlockCount());
-            }
-
-            if (tech.equals(MifareUltralight.class.getName())) {
-                sb.append('\n');
-                MifareUltralight mifareUlTag = MifareUltralight.get(tag);
-                String type = "Unknown";
-                switch (mifareUlTag.getType()) {
-                    case MifareUltralight.TYPE_ULTRALIGHT:
-                        type = "Ultralight";
-                        break;
-                    case MifareUltralight.TYPE_ULTRALIGHT_C:
-                        type = "Ultralight C";
-                        break;
-                }
-                sb.append("Mifare Ultralight type: ");
-                sb.append(type);
-            }
-        }
-
-        return sb.toString();
-    }
-
-    private String getHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = bytes.length - 1; i >= 0; --i) {
-            int b = bytes[i] & 0xff;
-            if (b < 0x10)
-                sb.append('0');
-            sb.append(Integer.toHexString(b));
-            if (i > 0) {
-                sb.append("-");
-            }
-        }
-        return sb.toString();
-    }
-
-    private long getDec(byte[] bytes) {
-        long result = 0;
-        long factor = 1;
-        for (int i = 0; i < bytes.length; ++i) {
-            long value = bytes[i] & 0xffl;
-            result += value * factor;
-            factor *= 256l;
-        }
-        return result;
-    }
-
-    private long getReversed(byte[] bytes) {
-        long result = 0;
-        long factor = 1;
-        for (int i = bytes.length - 1; i >= 0; --i) {
-            long value = bytes[i] & 0xffl;
-            result += value * factor;
-            factor *= 256l;
-        }
-        return result;
-    }
-
-    @Override
-    public void onNewIntent(Intent intent) {
-        Log.d(LOG_LABEL, "onNewIntent ACTIVITY LIFECYCLE");
-        setIntent(intent);
-        resolveIntent(intent);
     }
 
     @Override
@@ -603,22 +396,20 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
     }
 
-    private void closeShakePopup(){
+    private void closeShakePopup() {
         pwindo.dismiss();
     }
 
     private View.OnClickListener cancel_button_click_listener = new View.OnClickListener() {
         public void onClick(View v) {
             pwindo.dismiss();
-
         }
     };
 
-
-      /* New version of onCheckedChanged event listener
-    @author: Karishma Changlani
+    /**
+     * New version of onCheckedChanged event listener
+     * @author: Karishma Changlani
      */
-
     @Override
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         View view = compoundButton.getRootView();
@@ -676,24 +467,4 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return sensorFactory.getSensors();
     }
 
-    public void onStartMultiTouch(View view) {
-        FragmentManager fm = getSupportFragmentManager();
-        FragmentTransaction transaction = fm.beginTransaction();
-        transaction.add(R.id.container, new MultiTouchFragment());
-        transaction.addToBackStack(null);
-        transaction.commit();
-    }
-
-    @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        if(active) {
-            int width = v.getWidth();
-            int height = v.getHeight();
-            for(Measurement measurement : Measurement.measurements(event, width, height)) {
-                dispatcher.dispatch(measurement);
-            }
-        }
-
-        return false;
-    }
 }
