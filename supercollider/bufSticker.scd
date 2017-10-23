@@ -27,10 +27,10 @@ SynthDef(\bufSticker, {|out = 0, bufnum, amp = 1, rate = 1, pan = 0, dist = 0|
     forgettor = PMOsc.ar(TExpRand.kr(55, 100.0, trig.dup), TExpRand.kr(30.0, 50, trig.dup) * pitchenv, modenv, mul: modenv.squared * 0.2).softclip + LPF.ar(BrownNoise.ar(0.4.dup), TExpRand.kr(80, 140.0, trig), modenv);
     Out.ar(out,
         modenv.squared * forgettor + ((1 - modenv) *
-        Pan2.ar(
-            if(LFNoise2.kr(LFNoise0.kr(0.3).exprange(0.125, 0.4), 0.5, 0.35).max(0).round.lag(0.2), LPF.ar(LeakDC.ar(Squiz.ar(sig, LFNoise1.kr(0.4).exprange(0.9, 1.6).squared.max(1), 1)), 10000), smear),
-            pan,
-            amp
+            Pan2.ar(
+                if(LFNoise2.kr(LFNoise0.kr(0.3).exprange(0.125, 0.4), 0.5, dist.linlin(0, 1.0, 0.1, 0.4125)).max(0).round.lag(0.2), LPF.ar(LeakDC.ar(Squiz.ar(sig, LFNoise1.kr(0.4).exprange(0.9, 1.6).squared.max(1), 1)), 10000), smear),
+                pan,
+                amp
         ))
     )
 }).store;
