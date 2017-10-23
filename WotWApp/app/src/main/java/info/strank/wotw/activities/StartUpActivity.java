@@ -33,6 +33,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -555,6 +556,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     }
 
     private void updateTarget() {
+        int location_no = this.sensorTracking.getLocation_no();
+        try {
+            this.soundManager.updateBuffer(location_no + 1);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
         addMarkers();
         closeShakePopup();
     }

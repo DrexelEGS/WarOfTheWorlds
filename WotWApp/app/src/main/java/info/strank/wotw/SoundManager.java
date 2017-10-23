@@ -1,6 +1,7 @@
 package info.strank.wotw;
 
 import android.content.Context;
+import android.nfc.NfcAdapter;
 import android.os.RemoteException;
 import android.util.Log;
 
@@ -28,6 +29,14 @@ public class SoundManager {
 
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
+    public String[] soundFiles = {"1_Chapel_Story.aif", "2_Curio_Story.aif","3_Welcome_Story.aif","4_Bathroom_Story.aif","5_Synagogue.aif", "6_Rich.aif", "7_Maleka.aif", "8_Solo_Alisha.aif"};
+    private String synthName;
+    private int bufferIndex;
+
+    public SoundManager() {
+        bufferIndex = 1;
+        synthName = "bufSticker";
+    }
 
     public void startUp(Context context) throws RemoteException {
         try {
@@ -37,7 +46,7 @@ public class SoundManager {
             StringBuilder sb = new StringBuilder();
             ScService.initDataDir(soundsDirStr);
             for (String fileTD : filesToDeliver) {
-                if (fileTD.toLowerCase().endsWith(".wav")   ) {
+                if (fileTD.toLowerCase().endsWith(".wav")  ||  fileTD.toLowerCase().endsWith(".aif")) {
                     ScService.deliverDataFile(context, fileTD, soundsDirStr);
                     sb.append(fileTD + " ");
                 }
@@ -73,18 +82,25 @@ public class SoundManager {
         printMessages();
     }
 
+    public void updateBuffer(int newbufIndex) throws RemoteException{
+        this.bufferIndex = newbufIndex;
+        superCollider.sendMessage(OscMessage.createNodeFreeMessage(node + 1));
+        superCollider.sendMessage(OscMessage.createSynthMessage(synthName, node + 1).add("bufnum").add(bufferIndex)); //start with first buffer
+        superCollider.sendMessage(OscMessage.createSetControlMessage(node + 1, "dist", 1f));
+
+    }
     // TODO: should probably split out the allocRead setup of the buffer, as that will be
     // re-done when moving targets, and maybe we should request a synced response and wait
     // for it before we restart the synth that uses the buffer
     // (but hopefully that will not be necessary)
 
     public void setupSynths(Context context) throws RemoteException {
-        String soundFile = "a11wlk01.wav";
-        String synthName = "bufSticker";
-        int bufferIndex = 10;
+        //String soundFile = soundFiles[0];
         superCollider.sendMessage(OscMessage.createSynthMessage("sonar", node));
-        superCollider.sendMessage(OscMessage.createAllocReadMessage(bufferIndex, ScService.getSoundsDirStr(context) + "/" + soundFile));
-        superCollider.sendMessage(OscMessage.createSynthMessage(synthName, node + 1).add("bufnum").add(bufferIndex));
+        for(int i = 0; i < soundFiles.length; i++) {
+            superCollider.sendMessage(OscMessage.createAllocReadMessage(i+1, ScService.getSoundsDirStr(context) + "/" + soundFiles[i]));
+        }
+        superCollider.sendMessage(OscMessage.createSynthMessage(synthName, node + 1).add("bufnum").add(bufferIndex)); //start with first buffer
         superCollider.sendMessage(OscMessage.createSetControlMessage(node + 1, "dist", 1f));
         printMessages();
     }
@@ -117,5 +133,13 @@ public class SoundManager {
         Log.d(LOG_LABEL, currentParamStr);
         printMessages();
         return result;
+    }
+
+    public String getSynthName() {
+        return synthName;
+    }
+
+    public void setSynthName(String synthName) {
+        this.synthName = synthName;
     }
 }
