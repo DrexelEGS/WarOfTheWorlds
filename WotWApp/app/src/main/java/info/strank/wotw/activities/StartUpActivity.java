@@ -288,15 +288,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onStop() {
         Log.d(LOG_LABEL, "onStop ACTIVITY LIFECYCLE");
         super.onStop();
-        try {
-            // TODO: we should probably do this, not sure why it is commented out here:
-            // Free up audio when the activity is not in the foreground
-            if (StartUpActivity.this.soundManager.superCollider!=null)
-                StartUpActivity.this.soundManager.superCollider.stop();
-            this.finish();
-        } catch (Exception re) {
-            re.printStackTrace();
-        }
     }
 
     @Override

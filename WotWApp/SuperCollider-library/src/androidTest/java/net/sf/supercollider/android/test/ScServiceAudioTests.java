@@ -59,9 +59,6 @@ public class ScServiceAudioTests {
 		assertTrue("Failed to find default file copied: " + fileToCheck,
 				Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
 		try {
-			// start it manually (which is unusual for bound services, but that seems to be necessary:
-			// TODO: should not be necessary, as it should start itself:
-			//servStub.start();
 			// Check it's working:
 			servStub.sendMessage(OscMessage.createSynthMessage("default", OscMessage.defaultNodeId));
 			Thread.sleep(1000);

@@ -44,9 +44,6 @@ public class SuperColliderActivity extends Activity {
 		public void onServiceConnected(ComponentName name, IBinder service) {
 			SuperColliderActivity.this.superCollider = (ISuperCollider.Stub) service;
 			try {
-				// Kick off the supercollider playback routine
-				// TODO this should move to the service itself, not called from here!
-				//superCollider.start();
 				// Start a synth playing
 				superCollider.sendMessage(OscMessage.createSynthMessage("default", OscMessage.defaultNodeId, 0, 1));
 				setUpControls(); // now we have an audio engine, let the activity hook up its controls
@@ -155,35 +152,16 @@ public class SuperColliderActivity extends Activity {
 	@Override
 	public void onPause() {
 		super.onPause();
-		try {
-			// Free up audio when the activity is not in the foreground
-			if (superCollider!=null) superCollider.stop();
-			this.finish();
-		} catch (RemoteException e) {
-			e.printStackTrace();
-		}
 	}
 	
 	@Override
 	public void onStop() {
 		super.onStop();
-		try {
-			// Free up audio when the activity is not in the foreground
-			if (superCollider!=null) superCollider.stop();
-			this.finish();
-		} catch (RemoteException re) {
-			re.printStackTrace();
-		} 
 	}
 	
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
-		try {
-			superCollider.closeUDP();
-		} catch (RemoteException e) {
-			e.printStackTrace();
-		}
 		unbindService(conn);
 	}
 
