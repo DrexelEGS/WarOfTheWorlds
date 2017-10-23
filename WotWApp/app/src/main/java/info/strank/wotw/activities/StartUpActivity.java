@@ -232,11 +232,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         startupFragment = new StartupFragment();
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
-
-        mapFragment = SupportMapFragment.newInstance();
-        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        fragmentTransaction.add(R.id.map, mapFragment);
-        fragmentTransaction.commit();
     }
 
     @Override
@@ -260,17 +255,27 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         super.onResume();
         this.loadSettings();
         this.sensorFactory.onResume();
+        // map setup here? or in oncreate?
+        mapFragment = SupportMapFragment.newInstance();
+        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
+        fragmentTransaction.add(R.id.map, mapFragment);
+        fragmentTransaction.commit();
+        /*if(this.mapFragment != null) {
+            this.mapFragment.onResume();
+        }*/
         if (active && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
         }
         bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
     }
 
-   @Override
+    @Override
     @SuppressLint("NewApi")
     protected void onPause() {
         Log.d(LOG_LABEL, "onPause ACTIVITY LIFECYCLE");
         super.onPause();
+        this.locationManager.removeUpdates(this);
+        this.mapFragment.onStop();
         this.sensorFactory.onPause();
         if (this.wakeLock.isHeld()) {
             this.wakeLock.release();
@@ -545,7 +550,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return super.onOptionsItemSelected(item);
     }
 
-
     public void addSensorFragment(SensorFragment sensorFragment) {
         this.dispatcher.addSensorConfiguration(sensorFragment.getSensorConfiguration());
     }
@@ -569,6 +573,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     }
 
     private void updateTarget() {
+        int location_no = this.sensorTracking.getLocation_no();
+        try {
+            this.soundManager.updateBuffer(location_no + 1);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
         addMarkers();
         closeShakePopup();
     }

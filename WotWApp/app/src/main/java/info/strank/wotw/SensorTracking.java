@@ -33,7 +33,9 @@ public class SensorTracking {
     private static final LatLng[] testTargetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
 
     public LatLng currentLocation = exciteLocation;
-    int location_no = 0;
+
+
+    private int location_no = 0;
     public LatLng targetLocation  = testTargetLocations[0];
 
     private long mLastShakeTime;
@@ -88,6 +90,13 @@ public class SensorTracking {
             }
         }
         return false;
+    }
+    public int getLocation_no() {
+        return location_no;
+    }
+
+    public void setLocation_no(int location_no) {
+        this.location_no = location_no;
     }
 
 }
