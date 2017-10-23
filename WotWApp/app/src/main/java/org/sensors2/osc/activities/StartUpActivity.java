@@ -226,11 +226,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
 
-        mapFragment = SupportMapFragment.newInstance();
-        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        fragmentTransaction.add(R.id.map, mapFragment);
-        fragmentTransaction.commit();
-
     }
 
     //protected void onResume(Bundle savedInstanceState){ bindService(scIntent, conn, BIND_AUTO_CREATE); }
@@ -479,9 +474,16 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     @Override
     @SuppressLint("NewApi")
     protected void onResume() {
+        Log.d("Crash messages", "Does the crash start here");
         super.onResume();
         this.loadSettings();
         this.sensorFactory.onResume();
+
+        mapFragment = SupportMapFragment.newInstance();
+        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
+        fragmentTransaction.add(R.id.map, mapFragment);
+        fragmentTransaction.commit();
+
         if (active && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
         }
@@ -496,6 +498,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
 
         }
+        /*if(this.mapFragment != null)
+            this.mapFragment.onResume();*/
+
         bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
     }
 
@@ -503,6 +508,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     @SuppressLint("NewApi")
     protected void onPause() {
         super.onPause();
+        this.locationManager.removeUpdates(this);
+        this.mapFragment.onStop();
         this.sensorFactory.onPause();
         if (this.wakeLock.isHeld()) {
             this.wakeLock.release();
@@ -515,7 +522,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             mAdapter.disableForegroundDispatch(this);
             mAdapter.disableForegroundNdefPush(this);
         }
-        unbindService(conn);
     }
 
     @Override
