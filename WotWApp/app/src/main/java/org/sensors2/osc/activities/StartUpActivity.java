@@ -134,8 +134,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
             Toast.makeText(getApplicationContext(), this.soundManager.currentParamStr, Toast.LENGTH_SHORT).show();
             // debug display and log:
-            TextView view = (TextView) this.findViewById(R.id.DisplayText);
-            view.append(Double.toString(this.sensorTracking.currentLocation.latitude));
+            try {
+                TextView view = (TextView) this.findViewById(R.id.DisplayText);
+                view.append(Double.toString(this.sensorTracking.currentLocation.latitude));
+            }catch (java.lang.NullPointerException E){
+                E.printStackTrace();
+            }
         }
         mapFragment.getMapAsync(this);
     }
