@@ -28,7 +28,7 @@ public class SoundManager {
 
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
-    public String[] soundFiles = {"1_Chapel_Story.aiff", "2_Curio_Story.aiff","3_Welcome_Story.aiff","4_Bathroom_Story.aiff","5_Synagogue.aiff", "6_Rich.aiff", "7_Maleka.aiff", "8_Solo_Alisha.aiff"};
+    public String[] soundFiles = {"1_Chapel_Story.aiff", "2_Curio_Story.aiff","3_Welcome_Story.aiff","4_Bathroom_Story.aiff","5_Synagogue.aiff", "6_Rich.aiff", "7_Maleka.aiff", "8_SoJo_Alisha.aiff"};
     private String synthName;
     private int bufferIndex;
 
