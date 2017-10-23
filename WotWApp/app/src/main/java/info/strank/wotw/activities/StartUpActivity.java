@@ -16,6 +16,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.RemoteException;
@@ -73,73 +74,36 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private SensorTracking sensorTracking = new SensorTracking();
     private SoundManager soundManager = new SoundManager();
 
+    private enum State {
+        PAUSED, // initial state, no sensor tracking
+        TRACKING, // tracking location and updating sound
+        SHAKING, // waiting for shake
+        SWITCHING_STATES, // in between states
+    }
+    private Handler stateSwitchHandler = new Handler();
+    private final long SWITCH_DELAY_MS = 500;
+    private State state = State.PAUSED;
+
     private LocationManager locationManager;
     private Settings settings;
     private SensorCommunication sensorFactory;
     private OscDispatcher dispatcher;
     private SensorManager sensorManager;
     private PowerManager.WakeLock wakeLock;
-    private boolean active;
     private GoogleMap map;
     private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
     private ServiceConnection conn = new ScServiceConnection();
 
-    public Settings getSettings() {
-        return this.settings;
-    }
-
     public ArrayList<String> availableSensors = new ArrayList<>();
     public String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
-
-    /**
-     *  Mapping interface:
-     **/
-
-    @Override
-    public void onLocationChanged(Location location) {
-        if (location != null) {
-            double distance = this.sensorTracking.updateDistance(location);
-            try {
-                if (this.soundManager.changeSynth(distance)) {
-                    initiateShakePopup();
-                }
-            } catch (RemoteException e){
-                e.printStackTrace();
-            }
-            Toast.makeText(getApplicationContext(), this.soundManager.currentParamStr, Toast.LENGTH_SHORT).show();
-            // debug display and log:
-            try {
-                TextView view = (TextView) this.findViewById(R.id.DisplayText);
-                view.append(Double.toString(this.sensorTracking.currentLocation.latitude));
-            }catch (java.lang.NullPointerException E){
-                E.printStackTrace();
-            }
-        }
-        mapFragment.getMapAsync(this);
-    }
-
-    @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {
-        Log.d(LOG_LABEL, "onStatusChanged: mapping provider " + provider);
-    }
-
-    @Override
-    public void onProviderEnabled(String provider) {
-        Log.d(LOG_LABEL, "onProviderEnabled: mapping provider " + provider);
-    }
-
-    @Override
-    public void onProviderDisabled(String provider) {
-        Log.d(LOG_LABEL, "onProviderDisabled: mapping provider " + provider);
-    }
 
     /**
      *  Supercollider service connection handling:
      **/
 
     private class ScServiceConnection implements ServiceConnection {
-        //@Override
+
         public void onServiceConnected(ComponentName name, IBinder service) {
             Log.d(LOG_LABEL, "onServiceConnected: component " + name);
             StartUpActivity.this.soundManager.superCollider = (ISuperCollider.Stub) service;
@@ -149,7 +113,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 re.printStackTrace();
             }
         }
-        //@Override
+
         public void onServiceDisconnected(ComponentName name) {
             Log.d(LOG_LABEL, "onServiceDisconnected: component " + name);
             try {
@@ -215,6 +179,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10, 1, this);
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10, 1, this);
+        }
     }
 
     @Override
@@ -238,7 +206,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         super.onResume();
         this.loadSettings();
         this.sensorFactory.onResume();
-        if (active && !this.wakeLock.isHeld()) {
+        if (this.state != State.PAUSED && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
         }
     }
@@ -272,6 +240,107 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     }
 
     /**
+     * State changes:
+     */
+
+    private Runnable switchingRunnable = null;
+    private void setState(final State nextState) {
+        if (switchingRunnable != null) {
+            this.stateSwitchHandler.removeCallbacks(switchingRunnable);
+        }
+        if (this.state == State.PAUSED || nextState == State.PAUSED) {
+            // switch immediately:
+            Log.d(LOG_LABEL, "STATE switching from: " + this.state + " to: " + nextState);
+            this.state = nextState;
+        } else {
+            Log.d(LOG_LABEL, "STATE switching from: " + this.state + " to: " + nextState);
+            this.state = State.SWITCHING_STATES;
+            switchingRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    Log.d(LOG_LABEL, "STATE switching from: " + StartUpActivity.this.state + " to: " + nextState);
+                    StartUpActivity.this.state = nextState;
+                }
+            };
+            this.stateSwitchHandler.postDelayed(switchingRunnable, SWITCH_DELAY_MS);
+        }
+    }
+
+    private void switchToShaking() {
+        showShakePopup();
+        // Listen for shakes:
+        Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        if (accelerometer != null) {
+            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        setState(State.SHAKING);
+    }
+
+    private void switchToNextTargetTracking() {
+        this.sensorTracking.switchTargetLocation();
+        try {
+            this.soundManager.switchSynthBuffer();
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+        addMarkers();
+        closeShakePopup();
+        setState(State.TRACKING);
+    }
+
+    /**
+     *  Mapping interface:
+     **/
+
+    @Override
+    public void onLocationChanged(Location location) {
+        if (location != null && this.state == State.TRACKING) {
+            double distance = this.sensorTracking.updateDistance(location);
+            try {
+                if (this.soundManager.setSynthControls(distance)) {
+                    switchToShaking();
+                }
+            } catch (RemoteException e){
+                e.printStackTrace();
+            }
+            Toast.makeText(getApplicationContext(), this.soundManager.currentParamStr, Toast.LENGTH_SHORT).show();
+        }
+        mapFragment.getMapAsync(this);
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+        Log.d(LOG_LABEL, "onStatusChanged: mapping provider " + provider);
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+        Log.d(LOG_LABEL, "onProviderEnabled: mapping provider " + provider);
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+        Log.d(LOG_LABEL, "onProviderDisabled: mapping provider " + provider);
+    }
+
+    public void addMarkers(){
+        map.clear();
+        map.addMarker(new MarkerOptions().position(
+                this.sensorTracking.targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+        map.addMarker(new MarkerOptions().position(
+                this.sensorTracking.currentLocation).title("Current Location").draggable(true));
+        map.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                this.sensorTracking.currentLocation, 15f));
+    }
+
+    public void onMapReady(GoogleMap map){
+        if(this.map == null) {
+            this.map = map;
+        }
+        addMarkers();
+    }
+
+    /**
      *  Management of other sensors:
      **/
 
@@ -294,6 +363,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return this.sensorManager;
     }
 
+    public Settings getSettings() {
+        return this.settings;
+    }
+
     private Settings loadSettings() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         Settings settings = new Settings(preferences);
@@ -302,6 +375,68 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         oscConfiguration.setPort(settings.getPort());
         return settings;
     }
+
+    public List<Parameters> getSensors() {
+        return sensorFactory.getSensors();
+    }
+
+    public void addSensorFragment(SensorFragment sensorFragment) {
+        this.dispatcher.addSensorConfiguration(sensorFragment.getSensorConfiguration());
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent sensorEvent) {
+        if (this.state == State.SHAKING) {
+            if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+                if (this.sensorTracking.checkAccelEvent(sensorEvent)) {
+                    switchToNextTargetTracking();
+                }
+            }
+        } else if (this.state == State.TRACKING) {
+            this.sensorFactory.dispatch(sensorEvent);
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        // We do not care about that
+    }
+
+    /**
+     * Shake popup handling
+     */
+
+    private PopupWindow pwindo;
+
+    private void showShakePopup() {
+        try {
+            // We need to get the instance of the LayoutInflater
+            LayoutInflater inflater = (LayoutInflater) StartUpActivity.this
+                    .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+            View layout = inflater.inflate(R.layout.shake_popup,
+                    (ViewGroup) findViewById(R.id.popup_element));
+            pwindo = new PopupWindow(layout, 300, 370, true);
+            pwindo.showAtLocation(layout, Gravity.CENTER, 0, 0);
+            Button btnClosePopup = (Button) layout.findViewById(R.id.btn_close_popup);
+            btnClosePopup.setOnClickListener(cancel_button_click_listener);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void closeShakePopup() {
+        pwindo.dismiss();
+    }
+
+    private View.OnClickListener cancel_button_click_listener = new View.OnClickListener() {
+        public void onClick(View v) {
+            switchToNextTargetTracking();
+        }
+    };
+
+    /**
+     * menu and button interaction:
+     **/
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -333,78 +468,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return super.onOptionsItemSelected(item);
     }
 
-    public void addSensorFragment(SensorFragment sensorFragment) {
-        this.dispatcher.addSensorConfiguration(sensorFragment.getSensorConfiguration());
-    }
-
-    @Override
-    public void onSensorChanged(SensorEvent sensorEvent) {
-        if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            if (this.sensorTracking.checkAccelEvent(sensorEvent)) {
-                updateTarget();
-            }
-        }
-        if (active) { //not sure why this was disabled while listening: && !listeningForShake) {
-            // shouldn't hurt to also do this for every accel event
-            this.sensorFactory.dispatch(sensorEvent);
-        }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
-        // We do not care about that
-    }
-
-    private void updateTarget() {
-        int location_no = this.sensorTracking.getLocation_no();
-        try {
-            this.soundManager.updateBuffer(location_no + 1);
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
-        addMarkers();
-        closeShakePopup();
-    }
-
-    private PopupWindow pwindo;
-
-    private void initiateShakePopup() {
-        try {
-            // We need to get the instance of the LayoutInflater
-            LayoutInflater inflater = (LayoutInflater) StartUpActivity.this
-                    .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-            View layout = inflater.inflate(R.layout.shake_popup,
-                    (ViewGroup) findViewById(R.id.popup_element));
-
-            pwindo = new PopupWindow(layout, 300, 370, true);
-            pwindo.showAtLocation(layout, Gravity.CENTER, 0, 0);
-            // Listen for shakes (For now this is a hacky way of doing it)
-
-            Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-            if (accelerometer != null) {
-                this.sensorTracking.listeningForShake = true;
-                sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
-            }
-
-            Button btnClosePopup = (Button) layout.findViewById(R.id.btn_close_popup);
-            btnClosePopup.setOnClickListener(cancel_button_click_listener);
-
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void closeShakePopup() {
-        pwindo.dismiss();
-    }
-
-    private View.OnClickListener cancel_button_click_listener = new View.OnClickListener() {
-        public void onClick(View v) {
-            pwindo.dismiss();
-        }
-    };
-
     /**
      * New version of onCheckedChanged event listener
      * @author: Karishma Changlani
@@ -413,10 +476,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
         View view = compoundButton.getRootView();
         TextView tv = (TextView) view.findViewById(R.id.DisplayText);
-        for(SensorConfiguration sc : this.dispatcher.getSensorConfigurations()){
+        for (SensorConfiguration sc : this.dispatcher.getSensorConfigurations()) {
             sc.setSend(isChecked);
         }
-        if(isChecked){
+        if (isChecked) {
             tv.setText("Desired Sensors:\n");
             for(String s:desiredSensors){
                 tv.append(s + "\n");
@@ -427,43 +490,20 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
             mapFragment.getMapAsync(this);
             try {
-                this.soundManager.setupSynths(this);
+                this.soundManager.setupSynths();
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
-        }
-        else{
+            setState(State.TRACKING);
+        } else {
             tv.setText("");
             try {
                 this.soundManager.freeSynths();
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
+            setState(State.PAUSED);
         }
-        active = isChecked;
-    }
-
-    public void addMarkers(){
-        map.clear();
-        map.addMarker(new MarkerOptions().position(
-                this.sensorTracking.targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
-        map.addMarker(new MarkerOptions().position(
-                this.sensorTracking.currentLocation).title("Current Location").draggable(true));
-        map.animateCamera(CameraUpdateFactory.newLatLngZoom(
-                this.sensorTracking.currentLocation, 15f));
-    }
-
-    public void onMapReady(GoogleMap map){
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10, 1, this);
-        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10, 1, this);
-        if(this.map == null) {
-            this.map = map;
-        }
-        addMarkers();
-    }
-
-    public List<Parameters> getSensors() {
-        return sensorFactory.getSensors();
     }
 
 }

@@ -26,20 +26,14 @@ public class SensorTracking {
     private static final double MAX_LNG = -75.18528;
 
     private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
-    private static final int MIN_TIME_BETWEEN_SHAKES_MILLISECS = 1000;
     private static final LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
     private static final LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private static final LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
     private static final LatLng[] testTargetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
 
-    public LatLng currentLocation = exciteLocation;
-
-
     private int location_no = 0;
-    public LatLng targetLocation  = testTargetLocations[0];
-
-    private long mLastShakeTime;
-    public boolean listeningForShake = false;
+    public LatLng currentLocation = exciteLocation;
+    public LatLng targetLocation  = testTargetLocations[location_no];
 
     private Location LatLngTOLocation(LatLng locationcoords){
         Location location = new Location(LocationManager.GPS_PROVIDER);
@@ -64,39 +58,25 @@ public class SensorTracking {
     }
 
     public boolean checkAccelEvent(SensorEvent sensorEvent) {
-        if (listeningForShake) {
-            long curTime = System.currentTimeMillis();
-            if ((curTime - mLastShakeTime) > MIN_TIME_BETWEEN_SHAKES_MILLISECS) {
-
-                float x = sensorEvent.values[0];
-                float y = sensorEvent.values[1];
-                float z = sensorEvent.values[2];
-
-                double acceleration = Math.sqrt(Math.pow(x, 2) +
-                        Math.pow(y, 2) +
-                        Math.pow(z, 2)) - SensorManager.GRAVITY_EARTH;
-                Log.d("Shake", "Acceleration is " + acceleration + "m/s^2");
-
-                if (acceleration > SHAKE_THRESHOLD) {
-                    listeningForShake = false;
-                    mLastShakeTime = curTime;
-                    Log.d("Shake", "Shake, Rattle, and Roll");
-                    location_no++;
-                    if (location_no > testTargetLocations.length)
-                        location_no = 0;
-                    targetLocation = testTargetLocations[location_no];
-                    return true;
-                }
-            }
+        float x = sensorEvent.values[0];
+        float y = sensorEvent.values[1];
+        float z = sensorEvent.values[2];
+        double acceleration = Math.sqrt(Math.pow(x, 2) +
+                Math.pow(y, 2) +
+                Math.pow(z, 2)) - SensorManager.GRAVITY_EARTH;
+        if (acceleration > SHAKE_THRESHOLD) {
+            Log.d(LOG_LABEL, "Shake Acceleration is " + acceleration + "m/s^2");
+            return true;
         }
         return false;
     }
-    public int getLocation_no() {
-        return location_no;
-    }
 
-    public void setLocation_no(int location_no) {
-        this.location_no = location_no;
+    public void switchTargetLocation() {
+        location_no++;
+        if (location_no >= testTargetLocations.length) {
+            location_no = 0;
+        }
+        targetLocation = testTargetLocations[location_no];
     }
 
 }

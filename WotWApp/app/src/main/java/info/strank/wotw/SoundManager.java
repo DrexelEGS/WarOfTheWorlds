@@ -22,39 +22,38 @@ public class SoundManager {
 
     final String LOG_LABEL = "WotW.SoundManager";
 
-    int node = 1001;
-    final double MAX_DISTANCE = 100;
-    final double MIN_DISTANCE = 10;
+    private final double MAX_DISTANCE = 100;
+    private final double MIN_DISTANCE = 10;
+    private final String BKGND_SYNTH_NAME = "sonar";
+    private final int BKGND_NODE_ID = 1001;
+    private final String STORY_SYNTH_NAME = "bufSticker";
+    private final int STORY_NODE_ID = 1002;
 
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
     public String[] soundFiles = {"1_Chapel_Story.aiff", "2_Curio_Story.aiff","3_Welcome_Story.aiff","4_Bathroom_Story.aiff","5_Synagogue.aiff", "6_Rich.aiff", "7_Maleka.aiff", "8_SoJo_Alisha.aiff"};
-    private String synthName;
-    private int bufferIndex;
+    private String soundsDirStr;
 
-    public SoundManager() {
-        bufferIndex = 1;
-        synthName = "bufSticker";
-    }
+    private int bufferIndex = 1;
+    private boolean synthsStarted = false;
 
     public void startUp(Context context) throws RemoteException {
+        // deliver all audio files:
+        this.soundsDirStr = ScService.getSoundsDirStr(context);
+        StringBuilder sb = new StringBuilder();
         try {
-            // deliver all wav files:
-            String soundsDirStr = ScService.getSoundsDirStr(context);
+            ScService.initDataDir(this.soundsDirStr);
             String[] filesToDeliver = context.getAssets().list("");
-            StringBuilder sb = new StringBuilder();
-            ScService.initDataDir(soundsDirStr);
             for (String fileTD : filesToDeliver) {
                 if (fileTD.toLowerCase().endsWith(".wav")
                         || fileTD.toLowerCase().endsWith(".aiff")
                         || fileTD.toLowerCase().endsWith(".aif")) {
-                    ScService.deliverDataFile(context, fileTD, soundsDirStr);
+                    ScService.deliverDataFile(context, fileTD, this.soundsDirStr);
                     sb.append(fileTD + " ");
                 }
             }
             Log.i(LOG_LABEL, "delivered wave files: " + sb.toString());
-        } catch (IOException e)
-        {
+        } catch (IOException e) {
             e.printStackTrace();
         }
         // basic communication setting for messages to the SC server:
@@ -79,62 +78,80 @@ public class SoundManager {
         }
     }
 
-    public void freeSynths() throws RemoteException {
-        superCollider.sendMessage(OscMessage.createNodeFreeMessage(node));
-        superCollider.sendMessage(OscMessage.createNodeFreeMessage(node + 1));
+    public void setupSynths() throws RemoteException {
+        superCollider.sendMessage(OscMessage.createSynthMessage(BKGND_SYNTH_NAME, BKGND_NODE_ID));
+        setupStorySynth();
         printMessages();
+        synthsStarted = true;
+        this.setSynthControls(MAX_DISTANCE);
     }
 
-    public void updateBuffer(int newbufIndex) throws RemoteException{
-        this.bufferIndex = newbufIndex;
-        superCollider.sendMessage(OscMessage.createNodeFreeMessage(node + 1));
-        superCollider.sendMessage(OscMessage.createSynthMessage(synthName, node + 1).add("bufnum").add(bufferIndex)); //start with first buffer
-        superCollider.sendMessage(OscMessage.createSetControlMessage(node + 1, "dist", 1f));
-
-    }
-    // TODO: should probably split out the allocRead setup of the buffer, as that will be
-    // re-done when moving targets, and maybe we should request a synced response and wait
-    // for it before we restart the synth that uses the buffer
-    // (but hopefully that will not be necessary)
-
-    public void setupSynths(Context context) throws RemoteException {
-        //String soundFile = soundFiles[0];
-        superCollider.sendMessage(OscMessage.createSynthMessage("sonar", node));
-        for(int i = 0; i < soundFiles.length; i++) {
-            superCollider.sendMessage(OscMessage.createAllocReadMessage(i+1, ScService.getSoundsDirStr(context) + "/" + soundFiles[i]));
-        }
-        superCollider.sendMessage(OscMessage.createSynthMessage(synthName, node + 1).add("bufnum").add(bufferIndex)); //start with first buffer
-        superCollider.sendMessage(OscMessage.createSetControlMessage(node + 1, "dist", 1f));
-        printMessages();
+    private void setupStorySynth() throws RemoteException {
+        String soundFile = soundFiles[bufferIndex - 1]; // from 1-based to 0-based as we want bufnum > 0 to be safe
+        superCollider.sendMessage(OscMessage.createAllocReadMessage(bufferIndex, this.soundsDirStr + "/" + soundFile));
+        // TODO: maybe we should request a synced response and wait
+        // for it before we restart the synth that uses the buffer
+        // (but hopefully that will not be necessary)
+        superCollider.sendMessage(OscMessage.createSynthMessage(STORY_SYNTH_NAME, STORY_NODE_ID).add("bufnum").add(bufferIndex));
     }
 
-    public boolean changeSynth(double distance) throws RemoteException {
+    public boolean setSynthControls(double distance) throws RemoteException {
         boolean result = false;
-        // TODO: need to make this more robust and maybe also take the direction for the sonar?
-        // and maybe the synth param calculation and the are-we-close calculation should be split
-        double amp = 0.1;
-        double freq = 200; //setting up minimum frequency so we always know that the synth is working.
-        double scale = 1;
-        if(distance < MAX_DISTANCE){
-            if(distance < MIN_DISTANCE) {
-                freq = 800;
-                scale = 0;
-                result = true;
+        if (synthsStarted) {
+            // TODO: need to make this more robust and maybe also take the direction for the sonar?
+            // and maybe the synth param calculation and the are-we-close calculation should be split
+            double amp = 0.1;
+            double freq = 200; //setting up minimum frequency so we always know that the synth is working.
+            double scale = 1;
+            if (distance < MAX_DISTANCE) {
+                if (distance < MIN_DISTANCE) {
+                    freq = 800;
+                    scale = 0;
+                    result = true;
+                } else {
+                    freq = 800 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE) * 200; //a negative slope fuction to ensure smooth increase
+                    scale = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                    amp = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                }
             }
-            else {
-                freq = 800 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE)*200; //a negative slope fuction to ensure smooth increase
-                scale = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
-                amp = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
-            }
+            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "freq", (float) freq));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "amp", (float) amp));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "dist", (float) scale));
+            // string for debugging display:
+            // TODO: check what is actually used so we display something useful here!
+            currentParamStr = "Dist " + (float) scale;
+            Log.d(LOG_LABEL, currentParamStr);
+            printMessages();
         }
-        superCollider.sendMessage(OscMessage.createSetControlMessage(node, "freq", (float) freq));
-        superCollider.sendMessage(OscMessage.createSetControlMessage(node, "amp", (float) amp));
-        superCollider.sendMessage(OscMessage.createSetControlMessage(node + 1, "dist", (float) scale));
-        // string for debugging display:
-        // TODO: check what is actually used so we display something useful here!
-        currentParamStr = "Dist " + (float) scale;
-        Log.d(LOG_LABEL, currentParamStr);
-        printMessages();
         return result;
+    }
+
+    /**
+     * Switch to the next story buffer, loop back on reaching the end of known stories.
+     */
+    public void switchSynthBuffer() throws RemoteException{
+        if (synthsStarted) {
+            // clean up previous buffer:
+            superCollider.sendMessage(OscMessage.createNodeFreeMessage(STORY_NODE_ID));
+            superCollider.sendMessage(OscMessage.createBufferFreeMessage(bufferIndex));
+            printMessages();
+            // switch to new buffer (1-based, while the soundFiles array is 0-based):
+            this.bufferIndex++;
+            if (this.bufferIndex > soundFiles.length) {
+                this.bufferIndex = 1;
+            }
+            setupStorySynth();
+            this.setSynthControls(MAX_DISTANCE);
+        }
+    }
+
+    public void freeSynths() throws RemoteException {
+        if (synthsStarted) {
+            superCollider.sendMessage(OscMessage.createNodeFreeMessage(BKGND_NODE_ID));
+            superCollider.sendMessage(OscMessage.createNodeFreeMessage(STORY_NODE_ID));
+            superCollider.sendMessage(OscMessage.createBufferFreeMessage(bufferIndex));
+            printMessages();
+            synthsStarted = false;
+        }
     }
 }
