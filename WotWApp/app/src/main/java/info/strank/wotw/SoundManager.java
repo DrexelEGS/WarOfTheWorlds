@@ -28,7 +28,7 @@ public class SoundManager {
 
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
-    public String[] soundFiles = {"1_Chapel_Story.aif", "2_Curio_Story.aif","3_Welcome_Story.aif","4_Bathroom_Story.aif","5_Synagogue.aif", "6_Rich.aif", "7_Maleka.aif", "8_Solo_Alisha.aif"};
+    public String[] soundFiles = {"1_Chapel_Story.aiff", "2_Curio_Story.aiff","3_Welcome_Story.aiff","4_Bathroom_Story.aiff","5_Synagogue.aiff", "6_Rich.aiff", "7_Maleka.aiff", "8_Solo_Alisha.aiff"};
     private String synthName;
     private int bufferIndex;
 
@@ -45,7 +45,9 @@ public class SoundManager {
             StringBuilder sb = new StringBuilder();
             ScService.initDataDir(soundsDirStr);
             for (String fileTD : filesToDeliver) {
-                if (fileTD.toLowerCase().endsWith(".wav")  ||  fileTD.toLowerCase().endsWith(".aif")) {
+                if (fileTD.toLowerCase().endsWith(".wav")
+                        || fileTD.toLowerCase().endsWith(".aiff")
+                        || fileTD.toLowerCase().endsWith(".aif")) {
                     ScService.deliverDataFile(context, fileTD, soundsDirStr);
                     sb.append(fileTD + " ");
                 }
