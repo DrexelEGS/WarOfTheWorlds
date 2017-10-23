@@ -1,4 +1,4 @@
-package org.sensors2.osc.activities;
+package info.strank.wotw.activities;
 
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
@@ -10,10 +10,10 @@ import android.support.v4.app.NavUtils;
 import android.view.MenuItem;
 import android.widget.TextView;
 
-import org.sensors2.osc.R;
-import org.sensors2.osc.dispatch.Bundling;
-import org.sensors2.osc.fragments.HelpSensorGroupFragment;
-import org.sensors2.osc.sensors.Parameters;
+import info.strank.wotw.R;
+import info.strank.wotw.dispatch.Bundling;
+import info.strank.wotw.fragments.HelpSensorGroupFragment;
+import info.strank.wotw.sensors.Parameters;
 
 import java.util.ArrayList;
 import java.util.List;

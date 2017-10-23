@@ -1,4 +1,4 @@
-package org.sensors2.osc.fragments;
+package info.strank.wotw.fragments;
 
 
 import android.os.Bundle;
@@ -9,9 +9,9 @@ import android.view.ViewGroup;
 import android.widget.CompoundButton;
 import android.widget.TextView;
 
-import org.sensors2.osc.R;
-import org.sensors2.osc.dispatch.Bundling;
-import org.sensors2.osc.dispatch.SensorConfiguration;
+import info.strank.wotw.R;
+import info.strank.wotw.dispatch.Bundling;
+import info.strank.wotw.dispatch.SensorConfiguration;
 
 public class SensorFragment extends Fragment {
 	private CompoundButton activeButton;

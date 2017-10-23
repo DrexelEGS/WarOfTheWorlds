@@ -1,4 +1,4 @@
-package org.sensors2.osc.activities;
+package info.strank.wotw.activities;
 
 import android.app.Activity;
 import android.content.pm.PackageManager;
@@ -9,7 +9,7 @@ import android.text.method.LinkMovementMethod;
 import android.view.MenuItem;
 import android.widget.TextView;
 
-import org.sensors2.osc.R;
+import info.strank.wotw.R;
 
 
 public class AboutActivity extends Activity {

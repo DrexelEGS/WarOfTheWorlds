@@ -1,11 +1,11 @@
-package org.sensors2.osc.sensors;
+package info.strank.wotw.sensors;
 
 import android.content.Context;
 import android.content.res.Resources;
 import android.hardware.Sensor;
 import android.nfc.NfcAdapter;
 
-import org.sensors2.osc.R;
+import info.strank.wotw.R;
 
 /**
  * Created by thomas on 05.11.14.

@@ -1,10 +1,9 @@
-package org.sensors2.osc.dispatch;
+package info.strank.wotw.dispatch;
 
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.util.Log;
 
 import com.illposed.osc.OSCMessage;
 

@@ -1,4 +1,4 @@
-package org.sensors2.osc.activities;
+package info.strank.wotw.activities;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -29,13 +29,10 @@ import android.os.Parcelable;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.preference.PreferenceManager;
-import android.support.v4.app.Fragment;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
-import android.support.v4.content.ContextCompat;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -43,7 +40,6 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.PopupWindow;
@@ -57,7 +53,6 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.Marker;
@@ -70,16 +65,14 @@ import org.sensors2.common.nfc.NfcActivity;
 import org.sensors2.common.sensors.Parameters;
 import org.sensors2.common.sensors.SensorActivity;
 import org.sensors2.common.sensors.SensorCommunication;
-import org.sensors2.osc.R;
-import org.sensors2.osc.dispatch.Bundling;
-import org.sensors2.osc.dispatch.OscConfiguration;
-import org.sensors2.osc.dispatch.OscDispatcher;
-import org.sensors2.osc.dispatch.SensorConfiguration;
-import org.sensors2.osc.fragments.MultiTouchFragment;
-import org.sensors2.osc.fragments.SensorFragment;
-import org.sensors2.osc.fragments.StartupFragment;
-import org.sensors2.osc.sensors.SensorDimensions;
-import org.sensors2.osc.sensors.Settings;
+import info.strank.wotw.R;
+import info.strank.wotw.dispatch.OscConfiguration;
+import info.strank.wotw.dispatch.OscDispatcher;
+import info.strank.wotw.dispatch.SensorConfiguration;
+import info.strank.wotw.fragments.MultiTouchFragment;
+import info.strank.wotw.fragments.SensorFragment;
+import info.strank.wotw.fragments.StartupFragment;
+import info.strank.wotw.sensors.Settings;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -244,13 +237,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD_MR1) {
             mAdapter = NfcAdapter.getDefaultAdapter(this);
             if (mAdapter != null && mAdapter.isEnabled()) {
-                parameters.add(new org.sensors2.osc.sensors.Parameters(mAdapter, this.getApplicationContext()));
+                parameters.add(new info.strank.wotw.sensors.Parameters(mAdapter, this.getApplicationContext()));
             }
         }
 
         // add device sensors
         for (Sensor sensor : sensorManager.getSensorList(Sensor.TYPE_ALL)) {
-            parameters.add(new org.sensors2.osc.sensors.Parameters(sensor, this.getApplicationContext()));
+            parameters.add(new info.strank.wotw.sensors.Parameters(sensor, this.getApplicationContext()));
         }
         return parameters;
     }

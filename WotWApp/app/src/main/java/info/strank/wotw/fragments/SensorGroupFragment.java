@@ -1,4 +1,4 @@
-package org.sensors2.osc.fragments;
+package info.strank.wotw.fragments;
 
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
@@ -9,10 +9,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import org.sensors2.osc.R;
-import org.sensors2.osc.activities.StartUpActivity;
-import org.sensors2.osc.dispatch.Bundling;
-import org.sensors2.osc.sensors.SensorDimensions;
+import info.strank.wotw.R;
+import info.strank.wotw.activities.StartUpActivity;
+import info.strank.wotw.dispatch.Bundling;
+import info.strank.wotw.sensors.SensorDimensions;
 
 import java.util.Map;
 
