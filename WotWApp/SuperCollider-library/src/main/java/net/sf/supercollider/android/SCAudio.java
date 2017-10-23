@@ -202,6 +202,7 @@ public class SCAudio extends Thread {
 		OscMessage msgFromServer=null;
 		int triesToFail = 8; // should be plenty, it should only take 2 cycles (I think) max
 		for(int i=0; i<triesToFail; ++i){
+			Thread.yield();
 			while((!ended) && SCAudio.hasMessages()){
 				msgFromServer = SCAudio.getMessage();
 				if (msgFromServer != null) {
