@@ -1,4 +1,4 @@
-package org.sensors2.osc.sensors;
+package info.strank.wotw.sensors;
 
 import android.content.SharedPreferences;
 

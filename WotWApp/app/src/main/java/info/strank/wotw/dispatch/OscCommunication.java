@@ -1,4 +1,4 @@
-package org.sensors2.osc.dispatch;
+package info.strank.wotw.dispatch;
 
 import android.os.HandlerThread;
 

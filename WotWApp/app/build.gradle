@@ -8,7 +8,7 @@ android {
     compileSdkVersion 26
     buildToolsVersion '25.0.2'
     defaultConfig {
-        applicationId 'org.sensors2.osc'
+        applicationId 'info.strank.wotw'
         targetSdkVersion 23
         minSdkVersion 23
         versionCode 1

@@ -1,4 +1,4 @@
-package org.sensors2.osc;
+package info.strank.wotw;
 
 import android.content.Context;
 import android.content.Intent;
@@ -17,10 +17,8 @@ import net.sf.supercollider.android.ScService;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.sensors2.osc.activities.StartUpActivity;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.TimeoutException;
 

@@ -1,4 +1,4 @@
-package org.sensors2.osc.fragments;
+package info.strank.wotw.fragments;
 
 
 import android.os.Bundle;
@@ -8,8 +8,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import org.sensors2.osc.R;
-import org.sensors2.osc.dispatch.Bundling;
+import info.strank.wotw.R;
+import info.strank.wotw.dispatch.Bundling;
 
 public class HelpSensorFragment extends Fragment {
 

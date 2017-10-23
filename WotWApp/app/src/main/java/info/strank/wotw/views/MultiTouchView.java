@@ -1,7 +1,6 @@
-package org.sensors2.osc.views;
+package info.strank.wotw.views;
 
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -9,7 +8,7 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 
-import org.sensors2.osc.fragments.MultiTouchFragment;
+import info.strank.wotw.fragments.MultiTouchFragment;
 
 public class MultiTouchView extends View {
 

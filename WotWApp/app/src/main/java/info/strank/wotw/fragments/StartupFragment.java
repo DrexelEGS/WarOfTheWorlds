@@ -1,10 +1,9 @@
-package org.sensors2.osc.fragments;
+package info.strank.wotw.fragments;
 
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,12 +11,12 @@ import android.widget.CompoundButton;
 import android.widget.ToggleButton;
 
 import org.sensors2.common.sensors.Parameters;
-import org.sensors2.osc.R;
-import org.sensors2.osc.activities.StartUpActivity;
-import org.sensors2.osc.dispatch.Bundling;
-import org.sensors2.osc.dispatch.OscDispatcher;
-import org.sensors2.osc.dispatch.SensorConfiguration;
-import org.sensors2.osc.sensors.SensorDimensions;
+import info.strank.wotw.R;
+import info.strank.wotw.activities.StartUpActivity;
+import info.strank.wotw.dispatch.Bundling;
+import info.strank.wotw.dispatch.OscDispatcher;
+import info.strank.wotw.dispatch.SensorConfiguration;
+import info.strank.wotw.sensors.SensorDimensions;
 
 import java.util.Map;
 
@@ -32,7 +31,7 @@ public class StartupFragment extends Fragment {
         StartUpActivity activity = (StartUpActivity) getActivity();
         activeButton.setOnCheckedChangeListener(activity);
         for (Parameters parameters : activity.getSensors()) {
-            createSensorFragments((org.sensors2.osc.sensors.Parameters) parameters);
+            createSensorFragments((info.strank.wotw.sensors.Parameters) parameters);
         }
 
         return v;
@@ -49,7 +48,7 @@ public class StartupFragment extends Fragment {
         activeButton = (ToggleButton) v.findViewById(R.id.toggleButton);
         StartUpActivity activity = (StartUpActivity) getActivity();
         for(Parameters parameters: activity.getSensors()) {
-            org.sensors2.osc.sensors.Parameters newParameters = (org.sensors2.osc.sensors.Parameters) parameters;
+            info.strank.wotw.sensors.Parameters newParameters = (info.strank.wotw.sensors.Parameters) parameters;
             String name = newParameters.getName();
             activity.availableSensors.add(name);
             for (String s : activity.desiredSensors) {
@@ -80,7 +79,7 @@ public class StartupFragment extends Fragment {
         return v;
     }
 
-    public void createSensorFragments(org.sensors2.osc.sensors.Parameters parameters) {
+    public void createSensorFragments(info.strank.wotw.sensors.Parameters parameters) {
         FragmentManager manager = getActivity().getSupportFragmentManager();
         SensorGroupFragment groupFragment = (SensorGroupFragment) manager.findFragmentByTag(parameters.getName());
 
@@ -94,7 +93,7 @@ public class StartupFragment extends Fragment {
 
     }
 
-    public SensorGroupFragment createFragment(org.sensors2.osc.sensors.Parameters parameters, FragmentManager manager) {
+    public SensorGroupFragment createFragment(info.strank.wotw.sensors.Parameters parameters, FragmentManager manager) {
         SensorGroupFragment groupFragment = new SensorGroupFragment();
         Bundle args = new Bundle();
         args.putInt(Bundling.DIMENSIONS, parameters.getDimensions());
