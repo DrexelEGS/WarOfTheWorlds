@@ -57,13 +57,14 @@ public class SoundManager {
         {
             e.printStackTrace();
         }
-        // Kick off the supercollider playback routine
-        // TODO: shouldn't be necessary, service should start itself
-        //superCollider.start();
         // basic communication setting for messages to the SC server:
         superCollider.sendMessage(OscMessage.createErrorModeMessage());
         superCollider.sendMessage(OscMessage.createNotifyMessage());
         printMessages();
+    }
+
+    public void shutDown() throws RemoteException {
+        this.freeSynths();
     }
 
     protected void printMessages() {
@@ -135,13 +136,5 @@ public class SoundManager {
         Log.d(LOG_LABEL, currentParamStr);
         printMessages();
         return result;
-    }
-
-    public String getSynthName() {
-        return synthName;
-    }
-
-    public void setSynthName(String synthName) {
-        this.synthName = synthName;
     }
 }

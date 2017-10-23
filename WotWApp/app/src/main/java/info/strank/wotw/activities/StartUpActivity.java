@@ -152,9 +152,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         //@Override
         public void onServiceDisconnected(ComponentName name) {
             Log.d(LOG_LABEL, "onServiceDisconnected: component " + name);
-            // TODO: should we call stop here? (which also sends a quit message)
-            // I blieve we should. hence I added a stop here. It does reduce a few errors
-            //StartUpActivity.this.soundManager.shutDown();
+            try {
+                StartUpActivity.this.soundManager.shutDown();
+            } catch (RemoteException re) {
+                re.printStackTrace();
+            }
         }
     }
 
@@ -208,6 +210,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         startupFragment = new StartupFragment();
         transaction.add(R.id.container, startupFragment);
         transaction.commit();
+        // map fragment setup in create, keep it over pause/resume to keep getting location updates:
+        mapFragment = SupportMapFragment.newInstance();
+        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
+        fragmentTransaction.add(R.id.map, mapFragment);
+        fragmentTransaction.commit();
     }
 
     @Override
@@ -231,14 +238,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         super.onResume();
         this.loadSettings();
         this.sensorFactory.onResume();
-        // map setup here? or in oncreate?
-        mapFragment = SupportMapFragment.newInstance();
-        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        fragmentTransaction.add(R.id.map, mapFragment);
-        fragmentTransaction.commit();
-        /*if(this.mapFragment != null) {
-            this.mapFragment.onResume();
-        }*/
         if (active && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
         }
@@ -249,8 +248,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onPause() {
         Log.d(LOG_LABEL, "onPause ACTIVITY LIFECYCLE");
         super.onPause();
-        this.locationManager.removeUpdates(this);
-        this.mapFragment.onStop();
         this.sensorFactory.onPause();
         if (this.wakeLock.isHeld()) {
             this.wakeLock.release();
@@ -269,6 +266,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onDestroy() {
         Log.d(LOG_LABEL, "onDestroy ACTIVITY LIFECYCLE");
         super.onDestroy();
+        this.locationManager.removeUpdates(this);
+        this.mapFragment.onStop();
         unbindService(conn);
     }
 
