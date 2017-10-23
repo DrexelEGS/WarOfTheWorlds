@@ -33,6 +33,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -40,6 +41,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.PopupWindow;
@@ -114,6 +116,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public ArrayList<String> availableSensors = new ArrayList<>();
     public String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
 
+    /**
+     *  Mapping interface:
+     **/
+
     @Override
     public void onLocationChanged(Location location) {
         if (location != null) {
@@ -139,19 +145,27 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {
+        Log.d(LOG_LABEL, "onStatusChanged: mapping provider " + provider);
     }
 
     @Override
     public void onProviderEnabled(String provider) {
+        Log.d(LOG_LABEL, "onProviderEnabled: mapping provider " + provider);
     }
 
     @Override
     public void onProviderDisabled(String provider) {
+        Log.d(LOG_LABEL, "onProviderDisabled: mapping provider " + provider);
     }
+
+    /**
+     *  Supercollider service connection handling:
+     **/
 
     private class ScServiceConnection implements ServiceConnection {
         //@Override
         public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.d(LOG_LABEL, "onServiceConnected: component " + name);
             StartUpActivity.this.soundManager.superCollider = (ISuperCollider.Stub) service;
             try {
                 StartUpActivity.this.soundManager.startUp(StartUpActivity.this);
@@ -161,18 +175,16 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
         //@Override
         public void onServiceDisconnected(ComponentName name) {
+            Log.d(LOG_LABEL, "onServiceDisconnected: component " + name);
             // TODO: should we call stop here? (which also sends a quit message)
             // I blieve we should. hence I added a stop here. It does reduce a few errors
-            try {
-                if(StartUpActivity.this.soundManager.superCollider != null)
-                    StartUpActivity.this.soundManager.superCollider.stop();
-            } catch (RemoteException e) {
-                e.printStackTrace();
-            }
             //StartUpActivity.this.soundManager.shutDown();
         }
     }
 
+    /**
+     * Helper method for checking the permissions we need.
+     */
     public static boolean hasPermissions(Context context, String... permissions) {
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && context != null && permissions != null) {
             for (String permission : permissions) {
@@ -184,34 +196,36 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return true;
     }
 
+    /**
+     *  Activity lifecycle management: create - start / restart - resume --- pause - stop - destroy
+     **/
+
     @Override
     @SuppressLint("NewApi")
     protected void onCreate(Bundle savedInstanceState) {
+        Log.d(LOG_LABEL, "onCreate ACTIVITY LIFECYCLE");
         super.onCreate(savedInstanceState);
+        // make sure we have all permissions needed:
         int PERMISSION_ALL = 1;
         String[] PERMISSIONS = {Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BODY_SENSORS};
-
         if(!hasPermissions(this, PERMISSIONS)){
             ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
         }
-
-        this.locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        setContentView(R.layout.activity_main);
-        //mainWidget = new TextView(this); //TODO: Find a way to get rid of this
-        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
         this.settings = this.loadSettings();
+        // setup of location and sensor listening:
+        this.locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         this.dispatcher = new OscDispatcher();
         this.sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         this.sensorFactory = new SensorCommunication(this);
-        this.wakeLock = ((PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, this.getLocalClassName());
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD_MR1) {
-            resolveIntent(getIntent());
-            mAdapter = NfcAdapter.getDefaultAdapter(this);
-            mPendingIntent = PendingIntent.getActivity(this, 0,
-                    new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0);
-            mNdefPushMessage = new NdefMessage(new NdefRecord[]{newTextRecord(
-                    "Message from NFC Reader :-)", Locale.ENGLISH, true)});
-        }
+        // supercollider sound service:
+        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
+
+        // TODO: review the CPU wake lock:
+        this.wakeLock = ((PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, this.getLocalClassName());
+
+        // setup of visuals, request to keep the screen on:
+        setContentView(R.layout.activity_main);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         FragmentManager fm = getSupportFragmentManager();
         FragmentTransaction transaction = fm.beginTransaction();
@@ -223,12 +237,74 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.map, mapFragment);
         fragmentTransaction.commit();
-
     }
 
-    //protected void onResume(Bundle savedInstanceState){ bindService(scIntent, conn, BIND_AUTO_CREATE); }
-    //protected void onPause(Bundle savedInstanceState){ unbindService(conn); }
-    //protected void onDestroy(Bundle savedInstanceState) {    unbindService(conn);    }
+    @Override
+    @SuppressLint("NewApi")
+    protected void onStart() {
+        Log.d(LOG_LABEL, "onStart ACTIVITY LIFECYCLE");
+        super.onStart();
+    }
+
+    @Override
+    @SuppressLint("NewApi")
+    protected void onRestart() {
+        Log.d(LOG_LABEL, "onRestart ACTIVITY LIFECYCLE");
+        super.onRestart();
+    }
+
+    @Override
+    @SuppressLint("NewApi")
+    protected void onResume() {
+        Log.d(LOG_LABEL, "onResume ACTIVITY LIFECYCLE");
+        super.onResume();
+        this.loadSettings();
+        this.sensorFactory.onResume();
+        if (active && !this.wakeLock.isHeld()) {
+            this.wakeLock.acquire();
+        }
+        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
+    }
+
+   @Override
+    @SuppressLint("NewApi")
+    protected void onPause() {
+        Log.d(LOG_LABEL, "onPause ACTIVITY LIFECYCLE");
+        super.onPause();
+        this.sensorFactory.onPause();
+        if (this.wakeLock.isHeld()) {
+            this.wakeLock.release();
+        }
+        unbindService(conn);
+    }
+
+    @Override
+    @SuppressLint("NewApi")
+    protected void onStop() {
+        Log.d(LOG_LABEL, "onStop ACTIVITY LIFECYCLE");
+        super.onStop();
+        try {
+            // TODO: we should probably do this, not sure why it is commented out here:
+            // Free up audio when the activity is not in the foreground
+            if (StartUpActivity.this.soundManager.superCollider!=null)
+                StartUpActivity.this.soundManager.superCollider.stop();
+            this.finish();
+        } catch (Exception re) {
+            re.printStackTrace();
+        }
+    }
+
+    @Override
+    @SuppressLint("NewApi")
+    protected void onDestroy() {
+        Log.d(LOG_LABEL, "onDestroy ACTIVITY LIFECYCLE");
+        super.onDestroy();
+        // unbindService(conn); // should we ???
+    }
+
+    /**
+     *  Management of other sensors:
+     **/
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
         List<Parameters> parameters = new ArrayList<>();
@@ -415,6 +491,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onNewIntent(Intent intent) {
+        Log.d(LOG_LABEL, "onNewIntent ACTIVITY LIFECYCLE");
         setIntent(intent);
         resolveIntent(intent);
     }
@@ -468,63 +545,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return super.onOptionsItemSelected(item);
     }
 
-
-    @Override
-    @SuppressLint("NewApi")
-    protected void onResume() {
-        super.onResume();
-        this.loadSettings();
-        this.sensorFactory.onResume();
-        if (active && !this.wakeLock.isHeld()) {
-            this.wakeLock.acquire();
-        }
-
-        /**
-         * NFC
-         */
-        if (mAdapter != null) {
-            if (mAdapter.isEnabled()) {
-                mAdapter.enableForegroundDispatch(this, mPendingIntent, null, null);
-                mAdapter.enableForegroundNdefPush(this, mNdefPushMessage);
-            }
-
-        }
-        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
-    }
-
-    @Override
-    @SuppressLint("NewApi")
-    protected void onPause() {
-        super.onPause();
-        this.sensorFactory.onPause();
-        if (this.wakeLock.isHeld()) {
-            this.wakeLock.release();
-        }
-
-        /**
-         * NFC
-         */
-        if (mAdapter != null) {
-            mAdapter.disableForegroundDispatch(this);
-            mAdapter.disableForegroundNdefPush(this);
-        }
-        unbindService(conn);
-    }
-
-    @Override
-    @SuppressLint("NewApi")
-    protected void onStop() {
-        super.onStop();
-        try {
-            // TODO: we should probably do this, not sure why it is commented out here:
-            // Free up audio when the activity is not in the foreground
-            if (StartUpActivity.this.soundManager.superCollider!=null)
-                StartUpActivity.this.soundManager.superCollider.stop();
-            this.finish();
-        } catch (Exception re) {
-            re.printStackTrace();
-        }
-    }
 
     public void addSensorFragment(SensorFragment sensorFragment) {
         this.dispatcher.addSensorConfiguration(sensorFragment.getSensorConfiguration());

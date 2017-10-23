@@ -76,20 +76,37 @@ public class ScService extends Service {
     private int NOTIFICATION_ID = 1;
     private SCAudio audioThread;
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return mBinder;
-    }
-
-    public void start() {
+	public void start() {
 		if (audioThread == null || !audioThread.isRunning() ) {
 			audioThread = new SCAudio(0, getPluginsDirStr(this), getSynthDefsDirStr(this));
 			audioThread.start();
 		}
 	}
 
+	public void stop() {
+		if (audioThread != null) {
+			try {
+				mBinder.sendQuit();
+			} catch (RemoteException re) {
+				re.printStackTrace();
+			}
+			while (!audioThread.isEnded()) {
+				try {
+					Thread.sleep(50L);
+				} catch (InterruptedException err) {
+					err.printStackTrace();
+					break;
+				}
+			}
+		}
+	}
+
+	/*
+	 * Lifecycle management:
+	 */
+
 	@Override
-    public void onCreate() {
+	public void onCreate() {
 		Log.i(TAG, "SCService - onCreate called");
 		audioThread = null;
 		String synthDefsDirStr = getSynthDefsDirStr(this);
@@ -109,7 +126,67 @@ public class ScService extends Service {
 			e.printStackTrace();
 			showError("Could not create directory " + synthDefsDirStr + " or copy scsyndefs to it. Check if SD card is mounted to a host.");
 		}
+		// TODO: we should start the service thread here:
+		this.start();
+	}
+
+	@Override
+	public int onStartCommand(Intent intent, int flags, int startId) {
+		// The service is starting, due to a call to startService()
+		Log.i(TAG, "SCService - onStartCommand called");
+		int START_STICKY = 1;
+		try {
+			// Android 2.1 API allows us to specify that this service is a foreground task
+			Notification notification = new Notification(R.drawable.icon,
+					getText(R.string.app_name), System.currentTimeMillis());
+			Class<?> superClass = super.getClass();
+			Method startForeground = superClass.getMethod("startForeground",
+					new Class[] {
+							int.class,
+							Class.forName("android.app.Notification")
+					}
+			);
+			Field startStickyValue = superClass.getField("START_STICKY");
+			START_STICKY=startStickyValue.getInt(null);
+			startForeground.invoke(this, new Object[] {
+					NOTIFICATION_ID,
+					notification}
+			);
+		} catch (Exception nsme) {
+			// We can't get the newer methods
+		}
+		return Service.START_STICKY;
+	}
+
+	@Override
+    public IBinder onBind(Intent intent) {
+		// A client is binding to the service with bindService()
+		Log.d(TAG, "SCService - onBind called");
+        return mBinder;
     }
+
+	@Override
+	public boolean onUnbind(Intent intent) {
+		// All clients have unbound with unbindService()
+		Log.d(TAG, "SCService - onUnbind called");
+		return true; // allow rebind
+	}
+
+	@Override
+	public void onRebind(Intent intent) {
+		// A client is binding to the service with bindService(),
+		// after onUnbind() has already been called
+		Log.d(TAG, "SCService - onRebind called");
+	}
+
+	@Override
+	public void onDestroy() {
+		// The service is no longer used and is being destroyed
+		// Called by Android API when not the front app any more. For this one we'll quit
+		Log.d(TAG, "SCService - onDestroy called");
+		this.stop();
+		super.onDestroy();
+	}
 
 	private void showError(String errorMsg) {
 		//1
@@ -129,56 +206,6 @@ public class ScService extends Service {
 		mNotificationManager.notify(1, mNotification);
 
 		Log.e(SCAudio.TAG, errorMsg);
-	}
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-		Log.i(TAG, "SCService - onStartCommand called");
-		int START_STICKY = 1;
-        try {
-            // Android 2.1 API allows us to specify that this service is a foreground task
-            Notification notification = new Notification(R.drawable.icon,
-                    getText(R.string.app_name), System.currentTimeMillis());
-            Class<?> superClass = super.getClass();
-            Method startForeground = superClass.getMethod("startForeground",
-                new Class[] {
-                    int.class,
-                    Class.forName("android.app.Notification")
-                }
-            );
-            Field startStickyValue = superClass.getField("START_STICKY");
-            START_STICKY=startStickyValue.getInt(null);
-            startForeground.invoke(this, new Object[] {
-                NOTIFICATION_ID, 
-                notification}
-            );
-        } catch (Exception nsme) {
-            // We can't get the newer methods
-        }
-        return Service.START_STICKY;
-    }
-	
-    public void stop() {
-		try {
-			mBinder.sendQuit();
-		} catch (RemoteException re) {
-			re.printStackTrace();
-		} 
-		while(!audioThread.isEnded()){
-			try{
-				Thread.sleep(50L);
-			}catch(InterruptedException err){
-				err.printStackTrace();
-				break;
-			}
-		}
-    }
-    
-	// Called by Android API when not the front app any more. For this one we'll quit
-	@Override
-	public void onDestroy(){
-		stop();
-		super.onDestroy();
 	}
 
 	public static void deliverDataFile(Context context, String assetName, String targetDir) throws IOException {

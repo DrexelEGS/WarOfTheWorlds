@@ -48,7 +48,8 @@ public class SoundManager {
             e.printStackTrace();
         }
         // Kick off the supercollider playback routine
-        superCollider.start();
+        // TODO: shouldn't be necessary, service should start itself
+        //superCollider.start();
         // basic communication setting for messages to the SC server:
         superCollider.sendMessage(OscMessage.createErrorModeMessage());
         superCollider.sendMessage(OscMessage.createNotifyMessage());

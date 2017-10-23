@@ -45,7 +45,8 @@ public class SuperColliderActivity extends Activity {
 			SuperColliderActivity.this.superCollider = (ISuperCollider.Stub) service;
 			try {
 				// Kick off the supercollider playback routine
-				superCollider.start();
+				// TODO this should move to the service itself, not called from here!
+				//superCollider.start();
 				// Start a synth playing
 				superCollider.sendMessage(OscMessage.createSynthMessage("default", OscMessage.defaultNodeId, 0, 1));
 				setUpControls(); // now we have an audio engine, let the activity hook up its controls

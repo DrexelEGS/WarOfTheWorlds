@@ -60,12 +60,10 @@ public class SuperCollAsLibraryTest {
         String synthName = "PlayABuffer";
         String fileToCheck = synthName + ".scsyndef";
         String synthDefsDirStr = ScService.getSynthDefsDirStr(context);
+        assertTrue("Failed to find default file copied: " + fileToCheck,
+                Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
 
         try {
-            // start it manually (which is unusual for bound services, but that seems to be necessary:
-            servStub.start();
-            assertTrue("Failed to find default file copied: " + fileToCheck,
-                    Arrays.asList(new File(synthDefsDirStr).list()).contains(fileToCheck));
             servStub.sendMessage(OscMessage.createErrorModeMessage());
             servStub.sendMessage(OscMessage.createNotifyMessage());
             printMessages();
