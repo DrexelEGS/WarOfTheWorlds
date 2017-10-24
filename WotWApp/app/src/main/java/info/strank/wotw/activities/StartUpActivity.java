@@ -253,7 +253,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             Log.d(LOG_LABEL, "STATE switching from: " + this.state + " to: " + nextState);
             this.state = nextState;
         } else {
-            Log.d(LOG_LABEL, "STATE switching from: " + this.state + " to: " + nextState);
+            Log.d(LOG_LABEL, "STATE switching from: " + this.state + " to: " + State.SWITCHING_STATES);
             this.state = State.SWITCHING_STATES;
             switchingRunnable = new Runnable() {
                 @Override

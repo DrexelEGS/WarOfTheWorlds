@@ -52,7 +52,7 @@ public class SoundManager {
                     sb.append(fileTD + " ");
                 }
             }
-            Log.i(LOG_LABEL, "delivered wave files: " + sb.toString());
+            Log.i(LOG_LABEL, "delivered audio files: " + sb.toString());
         } catch (IOException e) {
             e.printStackTrace();
         }
