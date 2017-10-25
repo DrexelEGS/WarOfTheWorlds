@@ -1,7 +1,7 @@
 package info.strank.wotw;
 
 import android.content.Context;
-import android.os.Bundle;
+import android.content.SharedPreferences;
 import android.os.RemoteException;
 import android.util.Log;
 
@@ -46,18 +46,16 @@ public class SoundManager {
         return soundFiles.length;
     }
 
-    public Bundle getStateBundle() {
-        Bundle bundle = new Bundle();
-        bundle.putString("soundsDirStr", soundsDirStr);
-        bundle.putInt("bufferIndex", bufferIndex);
-        bundle.putBoolean("synthsStarted", synthsStarted);
-        return bundle;
+    public void saveStateToPrefs(SharedPreferences.Editor editor) {
+        editor.putString("soundsDirStr", soundsDirStr);
+        editor.putInt("bufferIndex", bufferIndex);
+        editor.putBoolean("synthsStarted", synthsStarted);
     }
 
-    public void setStateFromBundle(Bundle bundle) {
-        synthsStarted = bundle.getBoolean("synthsStarted");
-        bufferIndex = bundle.getInt("bufferIndex");
-        soundsDirStr = bundle.getString("soundsDirStr");
+    public void setStateFromPrefs(SharedPreferences prefs) {
+        synthsStarted = prefs.getBoolean("synthsStarted", false);
+        bufferIndex = prefs.getInt("bufferIndex", 1);
+        soundsDirStr = prefs.getString("soundsDirStr", "");
     }
 
     public void startUp(Context context) throws RemoteException {
