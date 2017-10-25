@@ -27,7 +27,7 @@ public class SensorTracking {
     private static final double MIN_LNG = -75.227379;
     private static final double MAX_LNG = -75.18528;
 
-    private static final float SHAKE_THRESHOLD = 3.25f; // m/S**2
+    private static final float SHAKE_THRESHOLD = 6 * 3.25f; // m/S**2
     private static final LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
     private static final LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private static final LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
