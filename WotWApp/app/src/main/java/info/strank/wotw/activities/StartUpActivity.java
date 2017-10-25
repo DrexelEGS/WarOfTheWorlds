@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
@@ -47,6 +50,8 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import org.sensors2.common.dispatch.DataDispatcher;
@@ -70,6 +75,8 @@ import info.strank.wotw.SoundManager;
 public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, CompoundButton.OnCheckedChangeListener, LocationListener {
 
     final String LOG_LABEL = "StartUpActivity";
+    final int MARKER_HEIGHT = 125;
+    final int MARKER_WIDTH = 125;
     // WotW specific tracking and sound generation:
     private SensorTracking sensorTracking = new SensorTracking();
     private SoundManager soundManager = new SoundManager();
@@ -136,6 +143,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
         }
         return true;
+    }
+
+    public Bitmap resizeIcon(String iconName,int width, int height){
+        Bitmap imageBitmap = BitmapFactory.decodeResource(getResources(),getResources().getIdentifier(iconName, "drawable", getPackageName()));
+        Bitmap resizedBitmap = Bitmap.createScaledBitmap(imageBitmap, width, height, false);
+        return resizedBitmap;
     }
 
     /**
@@ -324,13 +337,22 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     }
 
     public void addMarkers(){
+
         map.clear();
         map.addMarker(new MarkerOptions().position(
-                this.sensorTracking.targetLocation).title("Target Location").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+                this.sensorTracking.targetLocation).title("Target Location").icon(BitmapDescriptorFactory.fromBitmap(resizeIcon("wotw_header", MARKER_WIDTH, MARKER_HEIGHT))));
         map.addMarker(new MarkerOptions().position(
-                this.sensorTracking.currentLocation).title("Current Location").draggable(true));
+                this.sensorTracking.currentLocation).title("Current Location").flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_navigation_black_24dp)));
+
+        float stroke_width = (new CircleOptions()).getStrokeWidth()/2;
+        map.addCircle(new CircleOptions()
+                .center(this.sensorTracking.targetLocation)
+                .radius(this.soundManager.MIN_DISTANCE)
+                .strokeColor(Color.RED)
+                .fillColor(Color.TRANSPARENT).strokeWidth(stroke_width));
+        float zoom = 16.5f;
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(
-                this.sensorTracking.currentLocation, 15f));
+                this.sensorTracking.currentLocation, zoom));
     }
 
     public void onMapReady(GoogleMap map){
@@ -386,6 +408,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
+
         if (this.state == State.SHAKING) {
             if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
                 if (this.sensorTracking.checkAccelEvent(sensorEvent)) {

@@ -13,7 +13,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="5sp"
-        android:text="Hello!" />
+        android:text="Listen to the story. \n Shake device when you are done!" />
 
     <Button
         android:id="@+id/btn_close_popup"

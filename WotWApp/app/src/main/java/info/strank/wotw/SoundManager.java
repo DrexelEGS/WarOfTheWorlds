@@ -22,8 +22,8 @@ public class SoundManager {
 
     final String LOG_LABEL = "WotW.SoundManager";
 
-    private final double MAX_DISTANCE = 100;
-    private final double MIN_DISTANCE = 10;
+    public final double MAX_DISTANCE = 100;
+    public final double MIN_DISTANCE = 10;
     private final String BKGND_SYNTH_NAME = "sonar";
     private final int BKGND_NODE_ID = 1001;
     private final String STORY_SYNTH_NAME = "bufSticker";
