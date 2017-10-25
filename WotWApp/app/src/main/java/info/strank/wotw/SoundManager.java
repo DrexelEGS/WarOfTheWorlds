@@ -117,6 +117,8 @@ public class SoundManager {
     public boolean setSynthControls(double distance) throws RemoteException {
         boolean result = false;
         if (synthsStarted) {
+            // TODO: target a higher amp overall (1.5 for story, and more than now for bkgnd)
+
             // TODO: need to make this more robust and maybe also take the direction for the sonar?
             // and maybe the synth param calculation and the are-we-close calculation should be split
             double amp = 0.1;
