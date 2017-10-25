@@ -38,6 +38,14 @@ public class SoundManager {
     private int bufferIndex = 1;
     private boolean synthsStarted = false;
 
+    public int getCurrentStoryIndex() {
+        return bufferIndex;
+    }
+
+    public int getStoryCount() {
+        return soundFiles.length;
+    }
+
     public Bundle getStateBundle() {
         Bundle bundle = new Bundle();
         bundle.putString("soundsDirStr", soundsDirStr);

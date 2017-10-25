@@ -27,7 +27,6 @@ import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentTransaction;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -52,7 +51,6 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.CircleOptions;
-import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import org.sensors2.common.dispatch.DataDispatcher;
@@ -77,6 +75,7 @@ import info.strank.wotw.SoundManager;
 public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, CompoundButton.OnCheckedChangeListener, LocationListener {
 
     final String LOG_LABEL = "StartUpActivity";
+    final String STATUS_TEXT_FORMAT = "%s\t(Story %d out of %d)";
     final int MARKER_HEIGHT = 75;
     final int MARKER_WIDTH = 75;
     // WotW specific tracking and sound generation:
@@ -84,14 +83,14 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private SoundManager soundManager = new SoundManager();
 
     private enum State {
-        PAUSED, // initial state, no sensor tracking
-        TRACKING, // tracking location and updating sound
-        SHAKING, // waiting for shake
+        Paused, // initial state, no sensor tracking
+        Tracking, // tracking location and updating sound
+        Listening, // waiting for shake
         SWITCHING_STATES, // in between states
     }
     private Handler stateSwitchHandler = new Handler();
     private final long SWITCH_DELAY_MS = 500;
-    private State state = State.PAUSED;
+    private State state = State.Paused;
     private boolean stopSCService = false;
 
     private LocationManager locationManager;
@@ -103,6 +102,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private GoogleMap map;
     private SupportMapFragment mapFragment;
     private CompoundButton activeButton;
+    private TextView statusTextView;
     private ServiceConnection conn = new ScServiceConnection();
 
     public ArrayList<String> availableSensors = new ArrayList<>();
@@ -166,7 +166,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         // make sure we have all permissions needed:
         int PERMISSION_ALL = 1;
         String[] PERMISSIONS = {Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BODY_SENSORS};
-        if(!hasPermissions(this, PERMISSIONS)){
+        if (!hasPermissions(this, PERMISSIONS)) {
             ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
         }
         this.settings = this.loadSettings();
@@ -202,6 +202,17 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             this.onRestoreInstanceState(savedInstanceState);
         }
         activeButton.setOnCheckedChangeListener(this);
+        statusTextView = findViewById(R.id.status_text);
+        setStatusTextViewText();
+    }
+
+    void setStatusTextViewText() {
+        if (statusTextView != null) {
+            String result = String.format(STATUS_TEXT_FORMAT, this.state,
+                    soundManager.getCurrentStoryIndex(),
+                    soundManager.getStoryCount());
+            statusTextView.setText(result);
+        }
     }
 
     @Override
@@ -253,7 +264,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         super.onResume();
         this.loadSettings();
         this.sensorFactory.onResume();
-        if (this.state != State.PAUSED && !this.wakeLock.isHeld()) {
+        if (this.state != State.Paused && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
         }
     }
@@ -297,10 +308,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (switchingRunnable != null) {
             this.stateSwitchHandler.removeCallbacks(switchingRunnable);
         }
-        if (this.state == State.PAUSED || nextState == State.PAUSED) {
+        if (this.state == State.Paused || nextState == State.Paused) {
             // switch immediately:
             Log.d(LOG_LABEL, "STATE switching from: " + this.state + " to: " + nextState);
             this.state = nextState;
+            setStatusTextViewText();
         } else {
             Log.d(LOG_LABEL, "STATE switching from: " + this.state + " to: " + State.SWITCHING_STATES);
             this.state = State.SWITCHING_STATES;
@@ -309,6 +321,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 public void run() {
                     Log.d(LOG_LABEL, "STATE switching from: " + StartUpActivity.this.state + " to: " + nextState);
                     StartUpActivity.this.state = nextState;
+                    StartUpActivity.this.setStatusTextViewText();
                 }
             };
             this.stateSwitchHandler.postDelayed(switchingRunnable, SWITCH_DELAY_MS);
@@ -322,7 +335,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (accelerometer != null) {
             sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
         }
-        setState(State.SHAKING);
+        setState(State.Listening);
     }
 
     private void switchToNextTargetTracking() {
@@ -334,7 +347,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
         addMarkers();
         closeShakePopup();
-        setState(State.TRACKING);
+        setState(State.Tracking);
+    }
+
+    private void resetStories() {
+        // TODO
     }
 
     /**
@@ -343,7 +360,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onLocationChanged(Location location) {
-        if (location != null && this.state == State.TRACKING) {
+        if (location != null && this.state == State.Tracking) {
             double distance = this.sensorTracking.updateDistance(location);
             try {
                 if (this.soundManager.setSynthControls(distance)) {
@@ -474,13 +491,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        if (this.state == State.SHAKING) {
+        if (this.state == State.Listening) {
             if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
                 if (this.sensorTracking.checkAccelEvent(sensorEvent)) {
                     switchToNextTargetTracking();
                 }
             }
-        } else if (this.state == State.TRACKING) {
+        } else if (this.state == State.Tracking) {
             this.sensorFactory.dispatch(sensorEvent);
         }
     }
@@ -537,6 +554,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
         switch (id) {
+            case R.id.action_reset: {
+                resetStories();
+                return true;
+            }
             case R.id.action_settings: {
                 Intent intent = new Intent(this, SettingsActivity.class);
                 startActivity(intent);
@@ -583,7 +604,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 e.printStackTrace();
             }
             stopSCService = false;
-            setState(State.TRACKING);
+            setState(State.Tracking);
         } else {
             tv.setText("");
             try {
@@ -593,7 +614,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
             // only stop the service after this checkbox has been turned on and off:
             stopSCService = true;
-            setState(State.PAUSED);
+            setState(State.Paused);
         }
     }
 
