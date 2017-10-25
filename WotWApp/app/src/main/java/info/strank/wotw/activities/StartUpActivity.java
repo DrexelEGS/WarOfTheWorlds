@@ -330,11 +330,15 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     StartUpActivity.this.setStatusTextViewText();
                 }
             };
-            this.stateSwitchHandler.postDelayed(switchingRunnable, SWITCH_DELAY_MS);
+            long switchDelay = SWITCH_DELAY_MS;
+            if (nextState == State.Listening) {
+                switchDelay *= 6; // always wait longer when switching to listening mode
+            }
+            this.stateSwitchHandler.postDelayed(switchingRunnable, switchDelay);
         }
     }
 
-    private void switchToShaking() {
+    private void switchToListening() {
         showShakePopup();
         // Listen for shakes:
         Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -404,7 +408,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             double distance = this.sensorTracking.updateDistance(location);
             try {
                 if (this.soundManager.setSynthControls(distance)) {
-                    switchToShaking();
+                    switchToListening();
                 }
             } catch (RemoteException e){
                 e.printStackTrace();
@@ -569,7 +573,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
             View layout = inflater.inflate(R.layout.shake_popup,
                     (ViewGroup) findViewById(R.id.popup_element));
-            pwindo = new PopupWindow(layout, 300, 370, true);
+            pwindo = new PopupWindow(layout,
+                    mapFragment.getView().getWidth() * 3 / 4,
+                    mapFragment.getView().getHeight() * 3 / 4, false);
             pwindo.showAtLocation(layout, Gravity.CENTER, 0, 0);
             Button btnClosePopup = (Button) layout.findViewById(R.id.btn_close_popup);
             btnClosePopup.setOnClickListener(cancel_button_click_listener);
