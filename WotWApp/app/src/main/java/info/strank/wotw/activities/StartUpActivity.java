@@ -75,8 +75,8 @@ import info.strank.wotw.SoundManager;
 public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, CompoundButton.OnCheckedChangeListener, LocationListener {
 
     final String LOG_LABEL = "StartUpActivity";
-    final int MARKER_HEIGHT = 125;
-    final int MARKER_WIDTH = 125;
+    final int MARKER_HEIGHT = 50;
+    final int MARKER_WIDTH = 50;
     // WotW specific tracking and sound generation:
     private SensorTracking sensorTracking = new SensorTracking();
     private SoundManager soundManager = new SoundManager();
@@ -286,6 +286,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (accelerometer != null) {
             sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
         }
+
         setState(State.SHAKING);
     }
 
@@ -337,20 +338,23 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     }
 
     public void addMarkers(){
+        float zoom = 16.5f;
+        float stroke_width = (new CircleOptions()).getStrokeWidth()/2;
+        float bearing = this.sensorTracking.getBearing();
 
         map.clear();
         map.addMarker(new MarkerOptions().position(
                 this.sensorTracking.targetLocation).title("Target Location").icon(BitmapDescriptorFactory.fromBitmap(resizeIcon("wotw_header", MARKER_WIDTH, MARKER_HEIGHT))));
         map.addMarker(new MarkerOptions().position(
-                this.sensorTracking.currentLocation).title("Current Location").flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_navigation_black_24dp)));
+                this.sensorTracking.currentLocation).title("Current Location").flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_navigation_black_24dp)).rotation(bearing));
 
-        float stroke_width = (new CircleOptions()).getStrokeWidth()/2;
+
         map.addCircle(new CircleOptions()
                 .center(this.sensorTracking.targetLocation)
                 .radius(this.soundManager.MIN_DISTANCE)
                 .strokeColor(Color.RED)
                 .fillColor(Color.TRANSPARENT).strokeWidth(stroke_width));
-        float zoom = 16.5f;
+
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(
                 this.sensorTracking.currentLocation, zoom));
     }

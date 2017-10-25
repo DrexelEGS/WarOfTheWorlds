@@ -71,6 +71,28 @@ public class SensorTracking {
         return false;
     }
 
+    public float getBearing() {
+
+        double PI = 3.14159;
+        double lat1 = currentLocation.latitude * PI / 180;
+        double long1 = currentLocation.longitude * PI / 180;
+        double lat2 = targetLocation.latitude * PI / 180;
+        double long2 = targetLocation.longitude * PI / 180;
+
+        double dLon = (long2 - long1);
+
+        double y = Math.sin(dLon) * Math.cos(lat2);
+        double x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1)
+                * Math.cos(lat2) * Math.cos(dLon);
+
+        float brng = (float) Math.atan2(y, x);
+
+        brng = (float) Math.toDegrees(brng);
+        brng = (brng + 360) % 360;
+
+        return brng;
+    }
+
     public void switchTargetLocation() {
         location_no++;
         if (location_no >= testTargetLocations.length) {
