@@ -2,6 +2,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context=".activities.StartUpActivity">
     <item
+        android:id="@+id/action_next_story"
+        android:orderInCategory="20"
+        android:showAsAction="never"
+        android:title="@string/action_next_story" />
+    <item
         android:id="@+id/action_reset"
         android:orderInCategory="50"
         android:showAsAction="never"

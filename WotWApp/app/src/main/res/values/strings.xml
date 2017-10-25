@@ -3,6 +3,7 @@
     <string name="app_name" translatable="false">WotW Philly</string>
     <string name="action_settings">Settings</string>
     <string name="action_reset" translatable="false">Reset</string>
+    <string name="action_next_story" translatable="false">Next Story</string>
     <string name="host">Host</string>
     <string name="communication">Communication</string>
     <string name="port">Port</string>

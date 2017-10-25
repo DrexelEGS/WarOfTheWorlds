@@ -90,6 +90,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         Listening, // waiting for shake
         SWITCHING_STATES, // in between states
     }
+
     private Handler stateSwitchHandler = new Handler();
     private final long SWITCH_DELAY_MS = 500;
     private State state = State.Paused;
@@ -113,7 +114,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
 
     /**
-     *  Supercollider service connection handling:
+     * Supercollider service connection handling:
      **/
 
     private class ScServiceConnection implements ServiceConnection {
@@ -152,14 +153,14 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return true;
     }
 
-    public Bitmap resizeIcon(String iconName,int width, int height){
-        Bitmap imageBitmap = BitmapFactory.decodeResource(getResources(),getResources().getIdentifier(iconName, "drawable", getPackageName()));
+    public Bitmap resizeIcon(String iconName, int width, int height) {
+        Bitmap imageBitmap = BitmapFactory.decodeResource(getResources(), getResources().getIdentifier(iconName, "drawable", getPackageName()));
         Bitmap resizedBitmap = Bitmap.createScaledBitmap(imageBitmap, width, height, false);
         return resizedBitmap;
     }
 
     /**
-     *  Activity lifecycle management: create - start / restart - resume --- pause - stop - destroy
+     * Activity lifecycle management: create - start / restart - resume --- pause - stop - destroy
      **/
 
     @Override
@@ -219,24 +220,32 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     private void restorePrefs() {
         Log.d(LOG_LABEL, "restorePrefs");
-        SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
+        SharedPreferences settings = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         sensorTracking.setStateFromPrefs(settings);
         soundManager.setStateFromPrefs(settings);
         this.state = State.values()[settings.getInt("state", State.Paused.ordinal())];
-        stopSCService = settings.getBoolean("stopSCService", false);
         activeButton.setChecked(settings.getBoolean("activeChecked", false));
+        stopSCService = settings.getBoolean("stopSCService", false);
     }
 
     private void storePrefs() {
         Log.d(LOG_LABEL, "storePrefs");
         // We need an Editor object to make preference changes.
-        SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
+        SharedPreferences settings = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = settings.edit();
         editor.putBoolean("activeChecked", activeButton.isChecked());
         editor.putBoolean("stopSCService", stopSCService);
         editor.putInt("state", this.state.ordinal());
         soundManager.saveStateToPrefs(editor);
         sensorTracking.saveStateToPrefs(editor);
+        editor.commit();
+    }
+
+    private void resetPrefs() {
+        // used to reset the state of the app
+        SharedPreferences settings = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = settings.edit();
+        editor.clear();
         editor.commit();
     }
 
@@ -335,20 +344,54 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         setState(State.Listening);
     }
 
-    private void switchToNextTargetTracking() {
+    private void switchToNextTarget() {
         this.sensorTracking.switchTargetLocation();
         try {
-            this.soundManager.switchSynthBuffer();
+            this.soundManager.switchSynthBuffer(this);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
-        addMarkers();
+        if (mapFragment != null) {
+            mapFragment.getMapAsync(this);
+        }
         closeShakePopup();
+        setStatusTextViewText();
+    }
+
+    private void switchToNextTargetTracking() {
+        this.switchToNextTarget();
         setState(State.Tracking);
     }
 
+    private void startStory() {
+        if (mapFragment != null) {
+            mapFragment.getMapAsync(this);
+        }
+        try {
+            this.soundManager.setupSynths(this);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+        stopSCService = false;
+        setState(State.Tracking);
+    }
+
+    private void stopStory() {
+        try {
+            this.soundManager.freeSynths();
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+        setState(State.Paused);
+    }
+
     private void resetStories() {
-        // TODO
+        stopStory();
+        resetPrefs();
+        restorePrefs();
+        if (mapFragment != null) {
+            mapFragment.getMapAsync(this);
+        }
     }
 
     /**
@@ -399,11 +442,15 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         currentMarker = map.addMarker(new MarkerOptions().position(
                 this.sensorTracking.currentLocation).title("Current Location").flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_navigation_black_24dp)).rotation(bearing));
 
-
         map.addCircle(new CircleOptions()
                 .center(this.sensorTracking.getTargetLocation())
                 .radius(this.soundManager.MIN_DISTANCE)
                 .strokeColor(Color.RED)
+                .fillColor(Color.TRANSPARENT).strokeWidth(stroke_width));
+        map.addCircle(new CircleOptions()
+                .center(this.sensorTracking.getTargetLocation())
+                .radius(this.soundManager.MAX_DISTANCE)
+                .strokeColor(Color.BLACK)
                 .fillColor(Color.TRANSPARENT).strokeWidth(stroke_width));
 
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(
@@ -495,9 +542,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 }
             }
         } else if (this.state == State.Tracking) {
-            //just to make sure that getBearing isn't called for no reason
+            //just to make sure that updateBearing isn't called for no reason
             if(sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER || sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-                this.sensorTracking.getBearing(sensorEvent);
+                this.sensorTracking.updateBearing(sensorEvent);
                 currentMarker.setRotation(this.sensorTracking.currentBearing);
             }
             this.sensorFactory.dispatch(sensorEvent);
@@ -532,7 +579,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     }
 
     private void closeShakePopup() {
-        pwindo.dismiss();
+        if (pwindo != null) {
+            pwindo.dismiss();
+        }
     }
 
     private View.OnClickListener cancel_button_click_listener = new View.OnClickListener() {
@@ -560,6 +609,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 resetStories();
                 return true;
             }
+            case R.id.action_next_story: {
+                switchToNextTarget();
+                return true;
+            }
             case R.id.action_settings: {
                 Intent intent = new Intent(this, SettingsActivity.class);
                 startActivity(intent);
@@ -585,38 +638,16 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
      */
     @Override
     public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
-        View view = compoundButton.getRootView();
-        TextView tv = (TextView) view.findViewById(R.id.DisplayText);
+        Log.d(LOG_LABEL, "onCheckedChanged " + isChecked);
         for (SensorConfiguration sc : this.dispatcher.getSensorConfigurations()) {
             sc.setSend(isChecked);
         }
         if (isChecked) {
-            tv.setText("Desired Sensors:\n");
-            for(String s:desiredSensors){
-                tv.append(s + "\n");
-            }
-            tv.append("\n Available Senors: \n");
-            for(String s:availableSensors){
-                tv.append(s + "\n");
-            }
-            mapFragment.getMapAsync(this);
-            try {
-                this.soundManager.setupSynths();
-            } catch (RemoteException e) {
-                e.printStackTrace();
-            }
-            stopSCService = false;
-            setState(State.Tracking);
+            startStory();
         } else {
-            tv.setText("");
-            try {
-                this.soundManager.freeSynths();
-            } catch (RemoteException e) {
-                e.printStackTrace();
-            }
-            // only stop the service after this checkbox has been turned on and off:
+            stopStory();
+            // only stop the service after tha story has been explicitly stopped:
             stopSCService = true;
-            setState(State.Paused);
         }
     }
 

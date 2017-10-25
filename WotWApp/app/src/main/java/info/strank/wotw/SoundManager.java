@@ -33,7 +33,6 @@ public class SoundManager {
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
     public String[] soundFiles = {"1_Chapel_Story.aiff", "2_Curio_Story.aiff","3_Welcome_Story.aiff","4_Bathroom_Story.aiff","5_Synagogue.aiff", "6_Rich.aiff", "7_Maleka.aiff", "8_SoJo_Alisha.aiff"};
-    private String soundsDirStr;
 
     private int bufferIndex = 1;
     private boolean synthsStarted = false;
@@ -47,7 +46,6 @@ public class SoundManager {
     }
 
     public void saveStateToPrefs(SharedPreferences.Editor editor) {
-        editor.putString("soundsDirStr", soundsDirStr);
         editor.putInt("bufferIndex", bufferIndex);
         editor.putBoolean("synthsStarted", synthsStarted);
     }
@@ -55,21 +53,20 @@ public class SoundManager {
     public void setStateFromPrefs(SharedPreferences prefs) {
         synthsStarted = prefs.getBoolean("synthsStarted", false);
         bufferIndex = prefs.getInt("bufferIndex", 1);
-        soundsDirStr = prefs.getString("soundsDirStr", "");
     }
 
     public void startUp(Context context) throws RemoteException {
         // deliver all audio files:
-        this.soundsDirStr = ScService.getSoundsDirStr(context);
+        String soundsDirStr = ScService.getSoundsDirStr(context);
         StringBuilder sb = new StringBuilder();
         try {
-            ScService.initDataDir(this.soundsDirStr);
+            ScService.initDataDir(soundsDirStr);
             String[] filesToDeliver = context.getAssets().list("");
             for (String fileTD : filesToDeliver) {
                 if (fileTD.toLowerCase().endsWith(".wav")
                         || fileTD.toLowerCase().endsWith(".aiff")
                         || fileTD.toLowerCase().endsWith(".aif")) {
-                    ScService.deliverDataFile(context, fileTD, this.soundsDirStr);
+                    ScService.deliverDataFile(context, fileTD, soundsDirStr);
                     sb.append(fileTD + " ");
                 }
             }
@@ -99,17 +96,18 @@ public class SoundManager {
         }
     }
 
-    public void setupSynths() throws RemoteException {
+    public void setupSynths(Context context) throws RemoteException {
         superCollider.sendMessage(OscMessage.createSynthMessage(BKGND_SYNTH_NAME, BKGND_NODE_ID));
-        setupStorySynth();
+        setupStorySynth(context);
         printMessages();
         synthsStarted = true;
         this.setSynthControls(MAX_DISTANCE);
     }
 
-    private void setupStorySynth() throws RemoteException {
+    private void setupStorySynth(Context context) throws RemoteException {
+        String soundsDirStr = ScService.getSoundsDirStr(context);
         String soundFile = soundFiles[bufferIndex - 1]; // from 1-based to 0-based as we want bufnum > 0 to be safe
-        superCollider.sendMessage(OscMessage.createAllocReadMessage(bufferIndex, this.soundsDirStr + "/" + soundFile));
+        superCollider.sendMessage(OscMessage.createAllocReadMessage(bufferIndex, soundsDirStr + "/" + soundFile));
         // TODO: maybe we should request a synced response and wait
         // for it before we restart the synth that uses the buffer
         // (but hopefully that will not be necessary)
@@ -150,18 +148,20 @@ public class SoundManager {
     /**
      * Switch to the next story buffer, loop back on reaching the end of known stories.
      */
-    public void switchSynthBuffer() throws RemoteException{
+    public void switchSynthBuffer(Context context) throws RemoteException{
         if (synthsStarted) {
             // clean up previous buffer:
             superCollider.sendMessage(OscMessage.createNodeFreeMessage(STORY_NODE_ID));
             superCollider.sendMessage(OscMessage.createBufferFreeMessage(bufferIndex));
             printMessages();
-            // switch to new buffer (1-based, while the soundFiles array is 0-based):
-            this.bufferIndex++;
-            if (this.bufferIndex > soundFiles.length) {
-                this.bufferIndex = 1;
-            }
-            setupStorySynth();
+        }
+        // switch to new buffer (1-based, while the soundFiles array is 0-based):
+        this.bufferIndex++;
+        if (this.bufferIndex > soundFiles.length) {
+            this.bufferIndex = 1;
+        }
+        if (synthsStarted) {
+            setupStorySynth(context);
             this.setSynthControls(MAX_DISTANCE);
         }
     }
