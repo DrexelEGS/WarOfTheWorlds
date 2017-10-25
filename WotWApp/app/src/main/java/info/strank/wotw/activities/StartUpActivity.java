@@ -75,8 +75,8 @@ import info.strank.wotw.SoundManager;
 public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, CompoundButton.OnCheckedChangeListener, LocationListener {
 
     final String LOG_LABEL = "StartUpActivity";
-    final int MARKER_HEIGHT = 50;
-    final int MARKER_WIDTH = 50;
+    final int MARKER_HEIGHT = 75;
+    final int MARKER_WIDTH = 75;
     // WotW specific tracking and sound generation:
     private SensorTracking sensorTracking = new SensorTracking();
     private SoundManager soundManager = new SoundManager();
