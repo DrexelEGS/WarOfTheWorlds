@@ -1,5 +1,6 @@
 package info.strank.wotw;
 
+import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
 import android.location.Location;
@@ -32,8 +33,12 @@ public class SensorTracking {
     private static final LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
     private static final LatLng[] targetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
 
+    float[] mGravity;
+    float[] mGeomagnetic;
+
     private int location_no = 0;
     public LatLng currentLocation = exciteLocation;
+    public float currentBearing = 0;
 
     public Bundle getStateBundle() {
         Bundle bundle = new Bundle();
@@ -80,7 +85,7 @@ public class SensorTracking {
         }
         return false;
     }
-
+    /*
     public float getBearing() {
 
         double PI = 3.14159;
@@ -102,6 +107,31 @@ public class SensorTracking {
 
         return brng;
     }
+    */
+    public void getBearing(SensorEvent event){
+        float azimut = 0;
+        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER)
+            mGravity = event.values;
+
+        if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD)
+            mGeomagnetic = event.values;
+
+        if (mGravity != null && mGeomagnetic != null) {
+            float R[] = new float[9];
+            float I[] = new float[9];
+
+            if (SensorManager.getRotationMatrix(R, I, mGravity, mGeomagnetic)) {
+
+                // orientation contains azimut, pitch and roll
+                float orientation[] = new float[3];
+                SensorManager.getOrientation(R, orientation);
+
+                azimut = orientation[0];
+            }
+        }
+        float bearing = azimut * 360 / (2 * 3.14159f);
+        this.currentBearing = bearing;
+    }
 
     public void switchTargetLocation() {
         location_no++;
@@ -109,6 +139,8 @@ public class SensorTracking {
             location_no = 0;
         }
     }
+
+
 
     public LatLng getTargetLocation() {
         return targetLocations[location_no];

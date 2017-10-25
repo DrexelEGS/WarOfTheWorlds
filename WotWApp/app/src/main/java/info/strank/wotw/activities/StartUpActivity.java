@@ -51,6 +51,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import org.sensors2.common.dispatch.DataDispatcher;
@@ -93,6 +94,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private State state = State.Paused;
     private boolean stopSCService = false;
 
+    private Marker targetMarker;
+    private Marker currentMarker;
     private LocationManager locationManager;
     private Settings settings;
     private SensorCommunication sensorFactory;
@@ -394,12 +397,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     public void addMarkers(){
         float zoom = 16.5f;
         float stroke_width = (new CircleOptions()).getStrokeWidth()/2;
-        float bearing = this.sensorTracking.getBearing();
+        float bearing = this.sensorTracking.currentBearing;
 
         map.clear();
-        map.addMarker(new MarkerOptions().position(
+        targetMarker = map.addMarker(new MarkerOptions().position(
                 this.sensorTracking.getTargetLocation()).title("Target Location").icon(BitmapDescriptorFactory.fromBitmap(resizeIcon("wotw_header", MARKER_WIDTH, MARKER_HEIGHT))));
-        map.addMarker(new MarkerOptions().position(
+        currentMarker = map.addMarker(new MarkerOptions().position(
                 this.sensorTracking.currentLocation).title("Current Location").flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_navigation_black_24dp)).rotation(bearing));
 
 
@@ -498,6 +501,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                 }
             }
         } else if (this.state == State.Tracking) {
+            //just to make sure that getBearing isn't called for no reason
+            if(sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER || sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+                this.sensorTracking.getBearing(sensorEvent);
+                currentMarker.setRotation(this.sensorTracking.currentBearing);
+            }
             this.sensorFactory.dispatch(sensorEvent);
         }
     }
