@@ -41,6 +41,7 @@ import android.widget.CompoundButton;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ToggleButton;
 
 import net.sf.supercollider.android.ISuperCollider;
 
@@ -59,15 +60,16 @@ import org.sensors2.common.sensors.Parameters;
 import org.sensors2.common.sensors.SensorActivity;
 import org.sensors2.common.sensors.SensorCommunication;
 import info.strank.wotw.R;
+import info.strank.wotw.dispatch.Bundling;
 import info.strank.wotw.dispatch.OscConfiguration;
 import info.strank.wotw.dispatch.OscDispatcher;
 import info.strank.wotw.dispatch.SensorConfiguration;
-import info.strank.wotw.fragments.SensorFragment;
-import info.strank.wotw.fragments.StartupFragment;
+import info.strank.wotw.sensors.SensorDimensions;
 import info.strank.wotw.sensors.Settings;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import info.strank.wotw.SensorTracking;
 import info.strank.wotw.SoundManager;
@@ -90,6 +92,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private Handler stateSwitchHandler = new Handler();
     private final long SWITCH_DELAY_MS = 500;
     private State state = State.PAUSED;
+    private boolean stopSCService = false;
 
     private LocationManager locationManager;
     private Settings settings;
@@ -98,8 +101,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private SensorManager sensorManager;
     private PowerManager.WakeLock wakeLock;
     private GoogleMap map;
-    private StartupFragment startupFragment;
     private SupportMapFragment mapFragment;
+    private CompoundButton activeButton;
     private ServiceConnection conn = new ScServiceConnection();
 
     public ArrayList<String> availableSensors = new ArrayList<>();
@@ -172,30 +175,61 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         this.dispatcher = new OscDispatcher();
         this.sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         this.sensorFactory = new SensorCommunication(this);
-        // supercollider sound service:
-        bindService(new Intent(this, net.sf.supercollider.android.ScService.class),conn,BIND_AUTO_CREATE);
+        setupSensors();
+        // supercollider sound service, first start it and then bind
+        // to prevent destroy after unbind:
+        Intent serviceIntent = new Intent(this, net.sf.supercollider.android.ScService.class);
+        startService(serviceIntent);
+        bindService(serviceIntent, conn, BIND_AUTO_CREATE);
 
         // TODO: review the CPU wake lock:
         this.wakeLock = ((PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, this.getLocalClassName());
-
-        // setup of visuals, request to keep the screen on:
-        setContentView(R.layout.activity_main);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        FragmentManager fm = getSupportFragmentManager();
-        FragmentTransaction transaction = fm.beginTransaction();
-        startupFragment = new StartupFragment();
-        transaction.add(R.id.container, startupFragment);
-        transaction.commit();
-        // map fragment setup in create, keep it over pause/resume to keep getting location updates:
-        mapFragment = SupportMapFragment.newInstance();
-        android.support.v4.app.FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        fragmentTransaction.add(R.id.map, mapFragment);
-        fragmentTransaction.commit();
+        // setup of visuals, request to keep the screen on:
+        setContentView(R.layout.activity_start_up);
+        activeButton = (ToggleButton) findViewById(R.id.togglewotwButton);
+        if (mapFragment == null) {
+            FragmentManager fm = getSupportFragmentManager();
+            mapFragment = (SupportMapFragment) fm.findFragmentById(R.id.google_map_fragment);
+        }
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10, 1, this);
             locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10, 1, this);
         }
+        mapFragment.getMapAsync(this);
+        if (savedInstanceState != null) {
+            this.onRestoreInstanceState(savedInstanceState);
+        }
+        activeButton.setOnCheckedChangeListener(this);
+    }
+
+    @Override
+    protected void onRestoreInstanceState (Bundle savedInstanceState) {
+        Log.d(LOG_LABEL, "onRestoreInstanceState ACTIVITY LIFECYCLE");
+        sensorTracking.setStateFromBundle(savedInstanceState.getBundle("sensorTracking"));
+        soundManager.setStateFromBundle(savedInstanceState.getBundle("soundManager"));
+        this.state = State.values()[savedInstanceState.getInt("state")];
+        /*
+        ToggleButton activeButton = findViewById(R.id.toggleButton);
+        activeButton.setOnCheckedChangeListener(null);
+        activeButton.setChecked(savedInstanceState.getBoolean("activeChecked"));
+        activeButton.setOnCheckedChangeListener(this);
+        */
+        stopSCService = savedInstanceState.getBoolean("stopSCService");
+    }
+
+    @Override
+    protected void onSaveInstanceState (Bundle savedInstanceState) {
+        Log.d(LOG_LABEL, "onSaveInstanceState ACTIVITY LIFECYCLE");
+        savedInstanceState.putBoolean("stopSCService", stopSCService);
+        /*
+        ToggleButton activeButton = findViewById(R.id.toggleButton);
+        savedInstanceState.putBoolean("activeChecked", activeButton.isChecked());
+        */
+        savedInstanceState.putInt("state", this.state.ordinal());
+        savedInstanceState.putBundle("soundManager", soundManager.getStateBundle());
+        savedInstanceState.putBundle("sensorTracking", sensorTracking.getStateBundle());
     }
 
     @Override
@@ -248,8 +282,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         Log.d(LOG_LABEL, "onDestroy ACTIVITY LIFECYCLE");
         super.onDestroy();
         this.locationManager.removeUpdates(this);
-        this.mapFragment.onStop();
         unbindService(conn);
+        if (stopSCService) {
+            stopService(new Intent(this, net.sf.supercollider.android.ScService.class));
+        }
     }
 
     /**
@@ -286,7 +322,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (accelerometer != null) {
             sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
         }
-
         setState(State.SHAKING);
     }
 
@@ -319,7 +354,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             }
             Toast.makeText(getApplicationContext(), this.soundManager.currentParamStr, Toast.LENGTH_SHORT).show();
         }
-        mapFragment.getMapAsync(this);
+        if (this.mapFragment != null) {
+            mapFragment.getMapAsync(this);
+        }
     }
 
     @Override
@@ -344,13 +381,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
         map.clear();
         map.addMarker(new MarkerOptions().position(
-                this.sensorTracking.targetLocation).title("Target Location").icon(BitmapDescriptorFactory.fromBitmap(resizeIcon("wotw_header", MARKER_WIDTH, MARKER_HEIGHT))));
+                this.sensorTracking.getTargetLocation()).title("Target Location").icon(BitmapDescriptorFactory.fromBitmap(resizeIcon("wotw_header", MARKER_WIDTH, MARKER_HEIGHT))));
         map.addMarker(new MarkerOptions().position(
                 this.sensorTracking.currentLocation).title("Current Location").flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_navigation_black_24dp)).rotation(bearing));
 
 
         map.addCircle(new CircleOptions()
-                .center(this.sensorTracking.targetLocation)
+                .center(this.sensorTracking.getTargetLocation())
                 .radius(this.soundManager.MIN_DISTANCE)
                 .strokeColor(Color.RED)
                 .fillColor(Color.TRANSPARENT).strokeWidth(stroke_width));
@@ -369,6 +406,35 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     /**
      *  Management of other sensors:
      **/
+
+    private void setupSensors() {
+        for (Parameters parameters : this.getSensors()) {
+            info.strank.wotw.sensors.Parameters newParameters = (info.strank.wotw.sensors.Parameters) parameters;
+            String name = newParameters.getName();
+            this.availableSensors.add(name);
+            for (String s : this.desiredSensors) {
+                if (name.toLowerCase().contains(s.toLowerCase())) {
+                    Bundle args = new Bundle();
+                    int dimensions = newParameters.getDimensions();
+                    String oscPrefix = newParameters.getOscPrefix();
+                    for (Map.Entry<Integer, String> oscSuffix : SensorDimensions.GetOscSuffixes(dimensions).entrySet()) {
+                        String direction = oscSuffix.getValue();
+                        int i = oscSuffix.getKey();
+                        args.putInt(Bundling.SENSOR_TYPE, newParameters.getSensorType());
+                        args.putString(Bundling.NAME, direction);
+                        args.putString(Bundling.OSC_PREFIX, oscPrefix + direction);
+                        args.putInt(Bundling.INDEX, i);
+                        args.putString(Bundling.NAME, newParameters.getName());
+                        SensorConfiguration sc = new SensorConfiguration();
+                        sc.setIndex(args.getInt(Bundling.INDEX, 0));
+                        sc.setSensorType(args.getInt(Bundling.SENSOR_TYPE));
+                        sc.setOscParam(args.getString(Bundling.OSC_PREFIX));
+                        this.dispatcher.addSensorConfiguration(sc);
+                    }
+                }
+            }
+        }
+    }
 
     public List<Parameters> GetSensors(SensorManager sensorManager) {
         List<Parameters> parameters = new ArrayList<>();
@@ -406,13 +472,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return sensorFactory.getSensors();
     }
 
-    public void addSensorFragment(SensorFragment sensorFragment) {
-        this.dispatcher.addSensorConfiguration(sensorFragment.getSensorConfiguration());
-    }
-
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-
         if (this.state == State.SHAKING) {
             if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
                 if (this.sensorTracking.checkAccelEvent(sensorEvent)) {
@@ -521,6 +582,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
+            stopSCService = false;
             setState(State.TRACKING);
         } else {
             tv.setText("");
@@ -529,6 +591,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
+            // only stop the service after this checkbox has been turned on and off:
+            stopSCService = true;
             setState(State.PAUSED);
         }
     }

@@ -1,6 +1,7 @@
 package info.strank.wotw;
 
 import android.content.Context;
+import android.os.Bundle;
 import android.os.RemoteException;
 import android.util.Log;
 
@@ -36,6 +37,20 @@ public class SoundManager {
 
     private int bufferIndex = 1;
     private boolean synthsStarted = false;
+
+    public Bundle getStateBundle() {
+        Bundle bundle = new Bundle();
+        bundle.putString("soundsDirStr", soundsDirStr);
+        bundle.putInt("bufferIndex", bufferIndex);
+        bundle.putBoolean("synthsStarted", synthsStarted);
+        return bundle;
+    }
+
+    public void setStateFromBundle(Bundle bundle) {
+        synthsStarted = bundle.getBoolean("synthsStarted");
+        bufferIndex = bundle.getInt("bufferIndex");
+        soundsDirStr = bundle.getString("soundsDirStr");
+    }
 
     public void startUp(Context context) throws RemoteException {
         // deliver all audio files:

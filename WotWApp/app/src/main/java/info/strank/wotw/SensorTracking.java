@@ -4,6 +4,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationManager;
+import android.os.Bundle;
 import android.util.Log;
 
 import com.google.android.gms.maps.model.LatLng;
@@ -29,11 +30,20 @@ public class SensorTracking {
     private static final LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
     private static final LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private static final LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
-    private static final LatLng[] testTargetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
+    private static final LatLng[] targetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
 
     private int location_no = 0;
     public LatLng currentLocation = exciteLocation;
-    public LatLng targetLocation  = testTargetLocations[location_no];
+
+    public Bundle getStateBundle() {
+        Bundle bundle = new Bundle();
+        bundle.putInt("location_no", location_no);
+        return bundle;
+    }
+
+    public void setStateFromBundle(Bundle bundle) {
+        location_no = bundle.getInt("location_no");
+    }
 
     private Location LatLngTOLocation(LatLng locationcoords){
         Location location = new Location(LocationManager.GPS_PROVIDER);
@@ -53,7 +63,7 @@ public class SensorTracking {
         }
         Log.d(LOG_LABEL, debugStr);
         Location current = LatLngTOLocation(currentLocation);
-        Location target = LatLngTOLocation(targetLocation);
+        Location target = LatLngTOLocation(getTargetLocation());
         return current.distanceTo(target);
     }
 
@@ -76,8 +86,8 @@ public class SensorTracking {
         double PI = 3.14159;
         double lat1 = currentLocation.latitude * PI / 180;
         double long1 = currentLocation.longitude * PI / 180;
-        double lat2 = targetLocation.latitude * PI / 180;
-        double long2 = targetLocation.longitude * PI / 180;
+        double lat2 = getTargetLocation().latitude * PI / 180;
+        double long2 = getTargetLocation().longitude * PI / 180;
 
         double dLon = (long2 - long1);
 
@@ -95,10 +105,12 @@ public class SensorTracking {
 
     public void switchTargetLocation() {
         location_no++;
-        if (location_no >= testTargetLocations.length) {
+        if (location_no >= targetLocations.length) {
             location_no = 0;
         }
-        targetLocation = testTargetLocations[location_no];
     }
 
+    public LatLng getTargetLocation() {
+        return targetLocations[location_no];
+    }
 }
