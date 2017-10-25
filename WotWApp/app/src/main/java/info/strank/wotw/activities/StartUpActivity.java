@@ -76,6 +76,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     final String LOG_LABEL = "StartUpActivity";
     final String STATUS_TEXT_FORMAT = "%s\t(Story %d out of %d)";
+    private static final String PREFS_NAME = "WotWStatePrefs";
     final int MARKER_HEIGHT = 75;
     final int MARKER_WIDTH = 75;
     // WotW specific tracking and sound generation:
@@ -198,9 +199,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10, 1, this);
         }
         mapFragment.getMapAsync(this);
-        if (savedInstanceState != null) {
-            this.onRestoreInstanceState(savedInstanceState);
-        }
+        this.restorePrefs();
         activeButton.setOnCheckedChangeListener(this);
         statusTextView = findViewById(R.id.status_text);
         setStatusTextViewText();
@@ -215,32 +214,27 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
     }
 
-    @Override
-    protected void onRestoreInstanceState (Bundle savedInstanceState) {
-        Log.d(LOG_LABEL, "onRestoreInstanceState ACTIVITY LIFECYCLE");
-        sensorTracking.setStateFromBundle(savedInstanceState.getBundle("sensorTracking"));
-        soundManager.setStateFromBundle(savedInstanceState.getBundle("soundManager"));
-        this.state = State.values()[savedInstanceState.getInt("state")];
-        /*
-        ToggleButton activeButton = findViewById(R.id.toggleButton);
-        activeButton.setOnCheckedChangeListener(null);
-        activeButton.setChecked(savedInstanceState.getBoolean("activeChecked"));
-        activeButton.setOnCheckedChangeListener(this);
-        */
-        stopSCService = savedInstanceState.getBoolean("stopSCService");
+    private void restorePrefs() {
+        Log.d(LOG_LABEL, "restorePrefs");
+        SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
+        sensorTracking.setStateFromPrefs(settings);
+        soundManager.setStateFromPrefs(settings);
+        this.state = State.values()[settings.getInt("state", State.Paused.ordinal())];
+        stopSCService = settings.getBoolean("stopSCService", false);
+        activeButton.setChecked(settings.getBoolean("activeChecked", false));
     }
 
-    @Override
-    protected void onSaveInstanceState (Bundle savedInstanceState) {
-        Log.d(LOG_LABEL, "onSaveInstanceState ACTIVITY LIFECYCLE");
-        savedInstanceState.putBoolean("stopSCService", stopSCService);
-        /*
-        ToggleButton activeButton = findViewById(R.id.toggleButton);
-        savedInstanceState.putBoolean("activeChecked", activeButton.isChecked());
-        */
-        savedInstanceState.putInt("state", this.state.ordinal());
-        savedInstanceState.putBundle("soundManager", soundManager.getStateBundle());
-        savedInstanceState.putBundle("sensorTracking", sensorTracking.getStateBundle());
+    private void storePrefs() {
+        Log.d(LOG_LABEL, "storePrefs");
+        // We need an Editor object to make preference changes.
+        SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
+        SharedPreferences.Editor editor = settings.edit();
+        editor.putBoolean("activeChecked", activeButton.isChecked());
+        editor.putBoolean("stopSCService", stopSCService);
+        editor.putInt("state", this.state.ordinal());
+        soundManager.saveStateToPrefs(editor);
+        sensorTracking.saveStateToPrefs(editor);
+        editor.commit();
     }
 
     @Override
@@ -262,7 +256,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onResume() {
         Log.d(LOG_LABEL, "onResume ACTIVITY LIFECYCLE");
         super.onResume();
-        this.loadSettings();
         this.sensorFactory.onResume();
         if (this.state != State.Paused && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
@@ -285,6 +278,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onStop() {
         Log.d(LOG_LABEL, "onStop ACTIVITY LIFECYCLE");
         super.onStop();
+        storePrefs();
     }
 
     @Override

@@ -1,10 +1,10 @@
 package info.strank.wotw;
 
+import android.content.SharedPreferences;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationManager;
-import android.os.Bundle;
 import android.util.Log;
 
 import com.google.android.gms.maps.model.LatLng;
@@ -35,14 +35,13 @@ public class SensorTracking {
     private int location_no = 0;
     public LatLng currentLocation = exciteLocation;
 
-    public Bundle getStateBundle() {
-        Bundle bundle = new Bundle();
-        bundle.putInt("location_no", location_no);
-        return bundle;
+
+    public void saveStateToPrefs(SharedPreferences.Editor editor) {
+        editor.putInt("location_no", location_no);
     }
 
-    public void setStateFromBundle(Bundle bundle) {
-        location_no = bundle.getInt("location_no");
+    public void setStateFromPrefs(SharedPreferences prefs) {
+        location_no = prefs.getInt("location_no", 0);
     }
 
     private Location LatLngTOLocation(LatLng locationcoords){
