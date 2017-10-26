@@ -27,12 +27,12 @@ public class SoundManager {
     public final double MIN_DISTANCE = 10;
     private final String BKGND_SYNTH_NAME = "sonar";
     private final int BKGND_NODE_ID = 1001;
-    private final double BKGND_MIN_AMP = 0.05;
-    private final double BKGND_MAX_AMP = 1.0;
+    private final double BKGND_MIN_AMP = 0.1;
+    private final double BKGND_MAX_AMP = 1.3;
     private final String STORY_SYNTH_NAME = "bufSticker";
     private final int STORY_NODE_ID = 1002;
-    private final double STORY_MIN_AMP = 0.8;
-    private final double STORY_MAX_AMP = 1.9;
+    private final double STORY_MIN_AMP = 1.0;
+    private final double STORY_MAX_AMP = 2.3;
 
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
