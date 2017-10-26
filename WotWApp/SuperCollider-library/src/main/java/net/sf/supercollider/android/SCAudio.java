@@ -26,7 +26,7 @@ public class SCAudio extends Thread {
 	 * test is to waggle the notifications bar about while running - does it glitch much?
 	 */
 	private int numInChans = 1; // can choose in ctor but not afterwards 
-	final int numOutChans = 1;
+	final int numOutChans = 2;
 	public static int sampleRateInHz = 44100;
 	// bufSizeFrames (size of audio buffer passed in from android) 
 	// must be a multiple of 64 since scsynth's internal block length is unchanged from its default of 64.
