@@ -599,7 +599,8 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     (ViewGroup) findViewById(R.id.popup_element));
             pwindo = new PopupWindow(layout,
                     mapFragment.getView().getWidth() * 3 / 4,
-                    mapFragment.getView().getHeight() * 3 / 4, false);
+                    mapFragment.getView().getHeight() * 3 / 4,
+                    false);
             pwindo.showAtLocation(layout, Gravity.CENTER, 0, 0);
             Button btnClosePopup = (Button) layout.findViewById(R.id.btn_close_popup);
             btnClosePopup.setOnClickListener(cancel_button_click_listener);
