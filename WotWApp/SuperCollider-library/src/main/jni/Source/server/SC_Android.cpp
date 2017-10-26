@@ -258,6 +258,14 @@ extern "C" int scsynth_android_start(JNIEnv* env, jobject obj,
 }
 
 /**
+ * Need a method to wait for the main thread to shut down.
+ */
+extern "C" void scsynth_android_quit(JNIEnv* env, jobject obj) {
+	scprintf("scsynth_android_quit\n");
+	World_WaitForQuit(world,true);
+}
+
+/**
 * The callback that java uses to ask scsynth for some sound.
 * The length of the array is not necessarily the same as sc's block size -
 * it should be an exact multiple of it though.
@@ -394,6 +402,7 @@ extern "C" jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved){
 		{ "scsynth_android_doOsc"      , "([Ljava/lang/Object;)V", (void *) &scsynth_android_doOsc },
 		{ "scsynth_android_hasMessages", "()Z", (void *) &scsynth_android_hasMessages },
 		{ "scsynth_android_getMessage" , "()Lnet/sf/supercollider/android/OscMessage;", (void *) &scsynth_android_getMessage },
+		{ "scsynth_android_quit"       , "()V",   (void *) &scsynth_android_quit      },
 	};
 	env->RegisterNatives(cls, methods, sizeof(methods)/sizeof(methods[0]) );
 	return JNI_VERSION_1_4;

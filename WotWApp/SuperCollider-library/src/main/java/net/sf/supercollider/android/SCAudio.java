@@ -230,6 +230,7 @@ public class SCAudio extends Thread {
 			audioRecord.release();
 		}
 		ended = true;
+		scsynth_android_quit();
 	}
 	
 	/**
