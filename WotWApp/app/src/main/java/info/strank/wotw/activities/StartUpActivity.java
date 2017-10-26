@@ -434,7 +434,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (location != null && this.state == State.Tracking) {
             double distance = this.sensorTracking.updateDistance(location);
             try {
-                if (this.soundManager.setSynthControls(distance)) {
+                if (this.soundManager.setSynthControls(distance, this.sensorTracking.getTargetBearing())) {
                     switchToListening();
                 }
             } catch (RemoteException e){
@@ -561,6 +561,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             //just to make sure that updateBearing isn't called for no reason
             if(sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER || sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
                 this.sensorTracking.updateBearing(sensorEvent);
+                try {
+                    this.soundManager.setSynthPan(this.sensorTracking.getTargetBearing());
+                } catch (RemoteException e){
+                    e.printStackTrace();
+                }
                 if (currentMarker != null) {
                     currentMarker.setRotation(this.sensorTracking.currentBearing);
                 }

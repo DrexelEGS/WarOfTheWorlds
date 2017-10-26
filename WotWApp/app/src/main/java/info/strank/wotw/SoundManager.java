@@ -105,7 +105,7 @@ public class SoundManager {
         setupStorySynth(context);
         printMessages();
         synthsStarted = true;
-        this.setSynthControls(MAX_DISTANCE);
+        this.setSynthControls(MAX_DISTANCE, 0);
     }
 
     private void setupStorySynth(Context context) throws RemoteException {
@@ -123,7 +123,17 @@ public class SoundManager {
         return min + rate * (max - min);
     }
 
-    public boolean setSynthControls(double distance) throws RemoteException {
+    public double setSynthPan(double targetBearing) throws RemoteException {
+        double pan = targetBearing / 180; // -1 left to 1 right, used directly
+        if (synthsStarted) {
+            //Log.d(LOG_LABEL, "Setting pan " + pan + " for bearing " + targetBearing);
+            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "pan", (float) pan));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "pan", (float) pan));
+        }
+        return pan;
+    }
+
+    public boolean setSynthControls(double distance, double targetBearing) throws RemoteException {
         boolean result = false; // did we get close enough?
         if (synthsStarted) {
             // parameters we want for the used synths:
@@ -132,9 +142,9 @@ public class SoundManager {
             //       target a higher amp overall (1.5 for story), amp based on distance,
             //       reverse amp for sonar so it fades when getting closer
             // pan : stereo panorama, between -1 (left ear) and 1 (right ear)
-            double amp = 0; // 0 to 1 for selecting from a fixed range
-            double pan = 0; // -1 left to 1 right, used directly
             double dist = 1; // 0 (in goal circle) to 1 (max distance)
+            double amp = 0; // 0 to 1 for selecting from a fixed range
+            double pan = setSynthPan(targetBearing);
             if (distance < MAX_DISTANCE) {
                 if (distance < MIN_DISTANCE) {
                     dist = 0;
@@ -144,16 +154,13 @@ public class SoundManager {
                     amp = 1 - dist;
                 }
             }
+            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "dist", (float) dist));
             superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "amp",
                     (float) getInterpolated((1 - amp), BKGND_MIN_AMP, BKGND_MAX_AMP)));
-            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "pan", (float) pan));
-            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "dist", (float) dist));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "dist", (float) dist));
             superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "amp",
                     (float) getInterpolated(amp, STORY_MIN_AMP, STORY_MAX_AMP)));
-            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "pan", (float) pan));
-            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "dist", (float) dist));
             // string for debugging display:
-            // TODO: check what is actually used so we display something useful here!
             currentParamStr = String.format("Dist %.1fm (%.2f)", distance, dist);
             Log.d(LOG_LABEL, currentParamStr + " pan " + pan + " amp " + amp);
             printMessages();
@@ -178,7 +185,7 @@ public class SoundManager {
         }
         if (synthsStarted) {
             setupStorySynth(context);
-            this.setSynthControls(MAX_DISTANCE);
+            this.setSynthControls(MAX_DISTANCE, 0);
         }
     }
 

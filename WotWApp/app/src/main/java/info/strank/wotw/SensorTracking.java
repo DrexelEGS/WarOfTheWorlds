@@ -38,7 +38,9 @@ public class SensorTracking {
 
     private int location_no = 0;
     public LatLng currentLocation = exciteLocation;
-    public float currentBearing = 0;
+    public float currentBearing = 0; // north, in degrees -180 to +180
+    private float idealBearingToTarget = 0; // initial bearing from north in degrees on direct route to target
+
 
     private KalmanLatLong kalmanLatLong = new KalmanLatLong(3f); // for filtering GPS, moving 3m/s
 
@@ -72,6 +74,7 @@ public class SensorTracking {
         Log.d(LOG_LABEL, debugStr);
         Location current = LatLngTOLocation(currentLocation);
         Location target = LatLngTOLocation(getTargetLocation());
+        idealBearingToTarget = current.bearingTo(target);
         return current.distanceTo(target);
     }
 
@@ -104,11 +107,17 @@ public class SensorTracking {
                 // orientation contains azimut, pitch and roll
                 float orientation[] = new float[3];
                 SensorManager.getOrientation(R, orientation);
-                azimut = orientation[0];
+                azimut = orientation[0]; // from -pi to +pi, 0 is north
             }
         }
-        float bearing = azimut * 360 / (2 * 3.14159f);
+        float bearing = azimut * 180 / 3.14159f; // from radians to degrees
         this.currentBearing = bearing;
+    }
+
+    public float getTargetBearing() {
+        // degrees to target -180 to +180, TODO: actually clamp to that range
+        // 0 we are heading right there, -90 it's to the left
+        return idealBearingToTarget - currentBearing;
     }
 
     public void switchTargetLocation() {
