@@ -23,16 +23,16 @@ public class SoundManager {
 
     final String LOG_LABEL = "WotW.SoundManager";
 
-    public final double MAX_DISTANCE = 100;
+    public final double MAX_DISTANCE = 100; // meters
     public final double MIN_DISTANCE = 10;
     private final String BKGND_SYNTH_NAME = "sonar";
     private final int BKGND_NODE_ID = 1001;
-    private final double BKGND_MIN_AMP = 0.2;
-    private final double BKGND_MAX_AMP = 0.8;
+    private final double BKGND_MIN_AMP = 0.05;
+    private final double BKGND_MAX_AMP = 1.0;
     private final String STORY_SYNTH_NAME = "bufSticker";
     private final int STORY_NODE_ID = 1002;
-    private final double STORY_MIN_AMP = 0.5;
-    private final double STORY_MAX_AMP = 1.5;
+    private final double STORY_MIN_AMP = 0.8;
+    private final double STORY_MAX_AMP = 1.9;
 
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
@@ -157,8 +157,8 @@ public class SoundManager {
                     result = true;
                 } else {
                     dist = (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
-                    amp = 1 - dist;
                 }
+                amp = 1 - dist;
             }
             superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "dist", (float) dist));
             superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "amp",
