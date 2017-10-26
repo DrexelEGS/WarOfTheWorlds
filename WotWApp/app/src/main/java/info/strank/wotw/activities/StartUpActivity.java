@@ -15,6 +15,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
 import android.location.Location;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -111,6 +112,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     private CompoundButton activeButton;
     private TextView statusTextView;
     private ServiceConnection conn = new ScServiceConnection();
+    private MediaPlayer mediaPlayer;
 
     public ArrayList<String> availableSensors = new ArrayList<>();
     public String[] desiredSensors = {"Orientation", "Accelerometer", "Gyroscope", "Light", "Proximity"};
@@ -300,6 +302,10 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onStop() {
         Log.d(LOG_LABEL, "onStop ACTIVITY LIFECYCLE");
         googleApiClient.disconnect();
+        if (this.mediaPlayer != null) {
+            this.mediaPlayer.release();
+            this.mediaPlayer = null;
+        }
         super.onStop();
         storePrefs();
     }
@@ -588,25 +594,29 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
      * Shake popup handling
      */
 
+    private void playSuccessSound() {
+        if (this.mediaPlayer == null) {
+            this.mediaPlayer = MediaPlayer.create(getApplicationContext(), R.raw.passwordunlockshort);
+        }
+        this.mediaPlayer.start();
+    }
+
     private PopupWindow pwindo;
 
     private void showShakePopup() {
-        try {
-            // We need to get the instance of the LayoutInflater
-            LayoutInflater inflater = (LayoutInflater) StartUpActivity.this
-                    .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-            View layout = inflater.inflate(R.layout.shake_popup,
-                    (ViewGroup) findViewById(R.id.popup_element));
-            pwindo = new PopupWindow(layout,
-                    mapFragment.getView().getWidth() * 3 / 4,
-                    mapFragment.getView().getHeight() * 3 / 4,
-                    false);
-            pwindo.showAtLocation(layout, Gravity.CENTER, 0, 0);
-            Button btnClosePopup = (Button) layout.findViewById(R.id.btn_close_popup);
-            btnClosePopup.setOnClickListener(cancel_button_click_listener);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        playSuccessSound();
+        // We need to get the instance of the LayoutInflater
+        LayoutInflater inflater = (LayoutInflater) StartUpActivity.this
+                .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        View layout = inflater.inflate(R.layout.shake_popup,
+                (ViewGroup) findViewById(R.id.popup_element));
+        pwindo = new PopupWindow(layout,
+                mapFragment.getView().getWidth() * 3 / 4,
+                mapFragment.getView().getHeight() * 3 / 4,
+                false);
+        pwindo.showAtLocation(layout, Gravity.CENTER, 0, 0);
+        Button btnClosePopup = (Button) layout.findViewById(R.id.btn_close_popup);
+        btnClosePopup.setOnClickListener(cancel_button_click_listener);
     }
 
     private void closeShakePopup() {
