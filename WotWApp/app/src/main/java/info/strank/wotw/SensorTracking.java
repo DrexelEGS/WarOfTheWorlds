@@ -28,10 +28,34 @@ public class SensorTracking {
     private static final double MAX_LNG = -75.18528;
 
     private static final float SHAKE_THRESHOLD = 6 * 3.25f; // m/S**2
+    // specific locations for debugging:
     private static final LatLng exciteLocation = new LatLng(39.9561986, -75.1916809);
+    private static final LatLng drexelGymLocation = new LatLng(39.955796, -75.189654);
     private static final LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private static final LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
-    private static final LatLng[] targetLocations = {new LatLng(39.955796, -75.189654), new LatLng(39.955574, -75.188323), new LatLng(39.953778, -75.187547), new LatLng(39.954079, -75.189731), new LatLng(39.954354, -75.191753)};
+    /**
+     * this is a loop around Calvary:
+     type    latitude    longitude    name
+     W    39.9483212    -75.2189925    Story 1
+     W    39.9480961    -75.2196363    2
+     W    39.9475676    -75.2203926    3
+     W    39.9470371    -75.2197972    4
+     W    39.9474463    -75.2191374    5
+     W    39.9477959    -75.2186626    6
+     W    39.9481269    -75.2187592    7
+     W    39.9483922    -75.2183408    8
+     */
+    private static final LatLng[] targetLocations = {
+            new LatLng(39.9483212,    -75.2189925),
+            new LatLng(39.9480961,    -75.2196363),
+            new LatLng(39.9475676,    -75.2203926),
+            new LatLng(39.9470371,    -75.2197972),
+            new LatLng(39.9474463,    -75.2191374),
+            new LatLng(39.9477959,    -75.2186626),
+            new LatLng(39.9481269,    -75.2187592),
+            new LatLng(39.9483922,    -75.2183408),
+            drexelGymLocation, // for testing TODO: comment out in final build
+    };
 
     float[] mGravity;
     float[] mGeomagnetic;
@@ -41,9 +65,7 @@ public class SensorTracking {
     public float currentBearing = 0; // north, in degrees -180 to +180
     private float idealBearingToTarget = 0; // initial bearing from north in degrees on direct route to target
 
-
     private KalmanLatLong kalmanLatLong = new KalmanLatLong(3f); // for filtering GPS, moving 3m/s
-
 
     public void saveStateToPrefs(SharedPreferences.Editor editor) {
         editor.putInt("location_no", location_no);
