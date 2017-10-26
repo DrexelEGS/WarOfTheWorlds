@@ -15,8 +15,6 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -44,6 +42,10 @@ import android.widget.ToggleButton;
 
 import net.sf.supercollider.android.ISuperCollider;
 
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationListener;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 
@@ -73,7 +75,7 @@ import java.util.Map;
 import info.strank.wotw.SensorTracking;
 import info.strank.wotw.SoundManager;
 
-public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, CompoundButton.OnCheckedChangeListener, LocationListener {
+public class StartUpActivity extends FragmentActivity implements OnMapReadyCallback, SensorActivity, CompoundButton.OnCheckedChangeListener, LocationListener, GoogleApiClient.ConnectionCallbacks {
 
     final String LOG_LABEL = "StartUpActivity";
     final String STATUS_TEXT_FORMAT = "%s\t(Story %d out of %d)";
@@ -98,7 +100,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
 
     private Marker targetMarker;
     private Marker currentMarker;
-    private LocationManager locationManager;
+    private GoogleApiClient googleApiClient;
     private Settings settings;
     private SensorCommunication sensorFactory;
     private OscDispatcher dispatcher;
@@ -176,7 +178,13 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         }
         this.settings = this.loadSettings();
         // setup of location and sensor listening:
-        this.locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        // Create an instance of GoogleAPIClient.
+        if (googleApiClient == null) {
+            googleApiClient = new GoogleApiClient.Builder(this)
+                    .addConnectionCallbacks(this)
+                    .addApi(LocationServices.API)
+                    .build();
+        }
         this.dispatcher = new OscDispatcher();
         this.sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         this.sensorFactory = new SensorCommunication(this);
@@ -197,10 +205,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (mapFragment == null) {
             FragmentManager fm = getSupportFragmentManager();
             mapFragment = (SupportMapFragment) fm.findFragmentById(R.id.google_map_fragment);
-        }
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10, 1, this);
-            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10, 1, this);
         }
         mapFragment.getMapAsync(this);
         this.restorePrefs();
@@ -253,6 +257,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     @SuppressLint("NewApi")
     protected void onStart() {
         Log.d(LOG_LABEL, "onStart ACTIVITY LIFECYCLE");
+        googleApiClient.connect();
         super.onStart();
     }
 
@@ -289,6 +294,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     @SuppressLint("NewApi")
     protected void onStop() {
         Log.d(LOG_LABEL, "onStop ACTIVITY LIFECYCLE");
+        googleApiClient.disconnect();
         super.onStop();
         storePrefs();
     }
@@ -298,7 +304,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
     protected void onDestroy() {
         Log.d(LOG_LABEL, "onDestroy ACTIVITY LIFECYCLE");
         super.onDestroy();
-        this.locationManager.removeUpdates(this);
         unbindService(conn);
         if (stopSCService) {
             stopService(new Intent(this, net.sf.supercollider.android.ScService.class));
@@ -396,11 +401,33 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
+        setState(State.Paused);
     }
 
     /**
      *  Mapping interface:
      **/
+
+    @Override
+    public void onConnected(Bundle connectionHint) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            LocationServices.FusedLocationApi.requestLocationUpdates(
+                    googleApiClient, createLocationRequest(), this);
+        }
+    }
+
+    @Override
+    public void onConnectionSuspended(int cause) {
+        Log.d(LOG_LABEL, "Google API Client connection suspended.");
+    }
+
+    protected LocationRequest createLocationRequest() {
+        LocationRequest mLocationRequest = new LocationRequest();
+        mLocationRequest.setInterval(2000);
+        mLocationRequest.setFastestInterval(1000);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        return mLocationRequest;
+    }
 
     @Override
     public void onLocationChanged(Location location) {
@@ -418,21 +445,6 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (this.mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
-    }
-
-    @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {
-        Log.d(LOG_LABEL, "onStatusChanged: mapping provider " + provider);
-    }
-
-    @Override
-    public void onProviderEnabled(String provider) {
-        Log.d(LOG_LABEL, "onProviderEnabled: mapping provider " + provider);
-    }
-
-    @Override
-    public void onProviderDisabled(String provider) {
-        Log.d(LOG_LABEL, "onProviderDisabled: mapping provider " + provider);
     }
 
     public void addMarkers(){
@@ -549,7 +561,9 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             //just to make sure that updateBearing isn't called for no reason
             if(sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER || sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
                 this.sensorTracking.updateBearing(sensorEvent);
-                currentMarker.setRotation(this.sensorTracking.currentBearing);
+                if (currentMarker != null) {
+                    currentMarker.setRotation(this.sensorTracking.currentBearing);
+                }
             }
             this.sensorFactory.dispatch(sensorEvent);
         }
