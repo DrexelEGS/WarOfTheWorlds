@@ -63,7 +63,7 @@ public class ScService extends Service {
 		}
 	};
 	
-    private int NOTIFICATION_ID = 1;
+    private int NOTIFICATION_ID = 42;
     private SCAudio audioThread;
 
 	public void start() {
@@ -116,35 +116,22 @@ public class ScService extends Service {
 			e.printStackTrace();
 			showError("Could not create directory " + synthDefsDirStr + " or copy scsyndefs to it. Check if SD card is mounted to a host.");
 		}
-		// TODO: we should start the service thread here:
+		// Start the service thread here:
 		this.start();
 	}
 
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// The service is starting, due to a call to startService()
+		// So we want to actually make it a foreground service with a notification
 		Log.i(TAG, "SCService - onStartCommand called");
-		int START_STICKY = 1;
-		try {
-			// Android 2.1 API allows us to specify that this service is a foreground task
-			Notification notification = new Notification(R.drawable.icon,
-					getText(R.string.app_name), System.currentTimeMillis());
-			Class<?> superClass = super.getClass();
-			Method startForeground = superClass.getMethod("startForeground",
-					new Class[] {
-							int.class,
-							Class.forName("android.app.Notification")
-					}
-			);
-			Field startStickyValue = superClass.getField("START_STICKY");
-			START_STICKY=startStickyValue.getInt(null);
-			startForeground.invoke(this, new Object[] {
-					NOTIFICATION_ID,
-					notification}
-			);
-		} catch (Exception nsme) {
-			// We can't get the newer methods
-		}
+		Notification notification = new Notification.Builder(this)
+				.setContentTitle("SuperCollider Sound Server")
+				.setContentText("running")
+				.setSmallIcon(R.drawable.icon)
+				.setWhen(System.currentTimeMillis())
+				.build();
+		startForeground(NOTIFICATION_ID, notification);
 		return Service.START_STICKY;
 	}
 
@@ -179,22 +166,16 @@ public class ScService extends Service {
 	}
 
 	private void showError(String errorMsg) {
-		//1
-		String ns = Context.NOTIFICATION_SERVICE;
-		NotificationManager mNotificationManager = (NotificationManager) getSystemService(ns);
-		//2
-		int icon = R.drawable.icon;
-		CharSequence errorText = errorMsg;
-		Notification mNotification = new Notification(icon, errorText, System.currentTimeMillis());
-		//3
+		NotificationManager mNotificationManager = (NotificationManager) getSystemService(
+				Context.NOTIFICATION_SERVICE);
 		Context context = getApplicationContext();
-		CharSequence errorTitle = "SuperCollider error";
-		Intent notificationIntent = new Intent(this, ScService.class);
-		PendingIntent errorIntent = PendingIntent.getActivity(context, 0, notificationIntent, 0);
-		//			mNotification.setLatestEventInfo(context, errorTitle, errorText, errorIntent);
-		//4
-		mNotificationManager.notify(1, mNotification);
-
+		Notification notification = new Notification.Builder(context)
+				.setContentTitle("SuperCollider Error")
+				.setContentText(errorMsg)
+				.setSmallIcon(R.drawable.icon)
+				.setWhen(System.currentTimeMillis())
+				.build();
+		mNotificationManager.notify(1, notification);
 		Log.e(SCAudio.TAG, errorMsg);
 	}
 
