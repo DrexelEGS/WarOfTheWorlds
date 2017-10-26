@@ -27,8 +27,12 @@ public class SoundManager {
     public final double MIN_DISTANCE = 10;
     private final String BKGND_SYNTH_NAME = "sonar";
     private final int BKGND_NODE_ID = 1001;
+    private final double BKGND_MIN_AMP = 0.2;
+    private final double BKGND_MAX_AMP = 0.8;
     private final String STORY_SYNTH_NAME = "bufSticker";
     private final int STORY_NODE_ID = 1002;
+    private final double STORY_MIN_AMP = 0.5;
+    private final double STORY_MAX_AMP = 1.5;
 
     public String currentParamStr = "";
     public ISuperCollider.Stub superCollider;
@@ -114,34 +118,44 @@ public class SoundManager {
         superCollider.sendMessage(OscMessage.createSynthMessage(STORY_SYNTH_NAME, STORY_NODE_ID).add("bufnum").add(bufferIndex));
     }
 
-    public boolean setSynthControls(double distance) throws RemoteException {
-        boolean result = false;
-        if (synthsStarted) {
-            // TODO: target a higher amp overall (1.5 for story, and more than now for bkgnd)
+    // return a value between min and max based on amp from 0 to 1
+    private double getInterpolated(double rate, double min, double max) {
+        return min + rate * (max - min);
+    }
 
-            // TODO: need to make this more robust and maybe also take the direction for the sonar?
-            // and maybe the synth param calculation and the are-we-close calculation should be split
-            double amp = 0.1;
-            double freq = 200; //setting up minimum frequency so we always know that the synth is working.
-            double scale = 1;
+    public boolean setSynthControls(double distance) throws RemoteException {
+        boolean result = false; // did we get close enough?
+        if (synthsStarted) {
+            // parameters we want for the used synths:
+            // dist : distance to goal, normalized to 0..1 (0 being at goal)
+            // amp : volume (default for sonar is 0.2, for story 1)
+            //       target a higher amp overall (1.5 for story), amp based on distance,
+            //       reverse amp for sonar so it fades when getting closer
+            // pan : stereo panorama, between -1 (left ear) and 1 (right ear)
+            double amp = 0; // 0 to 1 for selecting from a fixed range
+            double pan = 0; // -1 left to 1 right, used directly
+            double dist = 1; // 0 (in goal circle) to 1 (max distance)
             if (distance < MAX_DISTANCE) {
                 if (distance < MIN_DISTANCE) {
-                    freq = 800;
-                    scale = 0;
+                    dist = 0;
                     result = true;
                 } else {
-                    freq = 800 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE) * 200; //a negative slope fuction to ensure smooth increase
-                    scale = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
-                    amp = 1.1 - (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                    dist = (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
+                    amp = 1 - dist;
                 }
             }
-            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "freq", (float) freq));
-            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "amp", (float) amp));
-            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "dist", (float) scale));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "amp",
+                    (float) getInterpolated((1 - amp), BKGND_MIN_AMP, BKGND_MAX_AMP)));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "pan", (float) pan));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "dist", (float) dist));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "amp",
+                    (float) getInterpolated(amp, STORY_MIN_AMP, STORY_MAX_AMP)));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "pan", (float) pan));
+            superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "dist", (float) dist));
             // string for debugging display:
             // TODO: check what is actually used so we display something useful here!
-            currentParamStr = "Dist " + (float) scale;
-            Log.d(LOG_LABEL, currentParamStr);
+            currentParamStr = String.format("Dist %.1fm (%.2f)", distance, dist);
+            Log.d(LOG_LABEL, currentParamStr + " pan " + pan + " amp " + amp);
             printMessages();
         }
         return result;
