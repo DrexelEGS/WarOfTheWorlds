@@ -78,10 +78,12 @@ public class SoundManager {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        // basic communication setting for messages to the SC server:
-        superCollider.sendMessage(OscMessage.createErrorModeMessage());
-        superCollider.sendMessage(OscMessage.createNotifyMessage());
-        printMessages();
+        if (superCollider != null) {
+            // basic communication setting for messages to the SC server:
+            superCollider.sendMessage(OscMessage.createErrorModeMessage());
+            superCollider.sendMessage(OscMessage.createNotifyMessage());
+            printMessages();
+        }
     }
 
     public void shutDown() throws RemoteException {
@@ -101,21 +103,25 @@ public class SoundManager {
     }
 
     public void setupSynths(Context context) throws RemoteException {
-        superCollider.sendMessage(OscMessage.createSynthMessage(BKGND_SYNTH_NAME, BKGND_NODE_ID));
-        setupStorySynth(context);
-        printMessages();
-        synthsStarted = true;
-        this.setSynthControls(MAX_DISTANCE, 0);
+        if (superCollider != null) {
+            superCollider.sendMessage(OscMessage.createSynthMessage(BKGND_SYNTH_NAME, BKGND_NODE_ID));
+            setupStorySynth(context);
+            printMessages();
+            synthsStarted = true;
+            this.setSynthControls(MAX_DISTANCE, 0);
+        }
     }
 
     private void setupStorySynth(Context context) throws RemoteException {
-        String soundsDirStr = ScService.getSoundsDirStr(context);
-        String soundFile = soundFiles[bufferIndex - 1]; // from 1-based to 0-based as we want bufnum > 0 to be safe
-        superCollider.sendMessage(OscMessage.createAllocReadMessage(bufferIndex, soundsDirStr + "/" + soundFile));
-        // TODO: maybe we should request a synced response and wait
-        // for it before we restart the synth that uses the buffer
-        // (but hopefully that will not be necessary)
-        superCollider.sendMessage(OscMessage.createSynthMessage(STORY_SYNTH_NAME, STORY_NODE_ID).add("bufnum").add(bufferIndex));
+        if (superCollider != null) {
+            String soundsDirStr = ScService.getSoundsDirStr(context);
+            String soundFile = soundFiles[bufferIndex - 1]; // from 1-based to 0-based as we want bufnum > 0 to be safe
+            superCollider.sendMessage(OscMessage.createAllocReadMessage(bufferIndex, soundsDirStr + "/" + soundFile));
+            // TODO: maybe we should request a synced response and wait
+            // for it before we restart the synth that uses the buffer
+            // (but hopefully that will not be necessary)
+            superCollider.sendMessage(OscMessage.createSynthMessage(STORY_SYNTH_NAME, STORY_NODE_ID).add("bufnum").add(bufferIndex));
+        }
     }
 
     // return a value between min and max based on amp from 0 to 1
@@ -125,7 +131,7 @@ public class SoundManager {
 
     public double setSynthPan(double targetBearing) throws RemoteException {
         double pan = targetBearing / 180; // -1 left to 1 right, used directly
-        if (synthsStarted) {
+        if (synthsStarted && superCollider != null) {
             //Log.d(LOG_LABEL, "Setting pan " + pan + " for bearing " + targetBearing);
             superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "pan", (float) pan));
             superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "pan", (float) pan));
@@ -135,7 +141,7 @@ public class SoundManager {
 
     public boolean setSynthControls(double distance, double targetBearing) throws RemoteException {
         boolean result = false; // did we get close enough?
-        if (synthsStarted) {
+        if (synthsStarted && superCollider != null) {
             // parameters we want for the used synths:
             // dist : distance to goal, normalized to 0..1 (0 being at goal)
             // amp : volume (default for sonar is 0.2, for story 1)
@@ -172,7 +178,7 @@ public class SoundManager {
      * Switch to the next story buffer, loop back on reaching the end of known stories.
      */
     public void switchSynthBuffer(Context context) throws RemoteException{
-        if (synthsStarted) {
+        if (synthsStarted && superCollider != null) {
             // clean up previous buffer:
             superCollider.sendMessage(OscMessage.createNodeFreeMessage(STORY_NODE_ID));
             superCollider.sendMessage(OscMessage.createBufferFreeMessage(bufferIndex));
@@ -183,14 +189,14 @@ public class SoundManager {
         if (this.bufferIndex > soundFiles.length) {
             this.bufferIndex = 1;
         }
-        if (synthsStarted) {
+        if (synthsStarted && superCollider != null) {
             setupStorySynth(context);
             this.setSynthControls(MAX_DISTANCE, 0);
         }
     }
 
     public void freeSynths() throws RemoteException {
-        if (synthsStarted) {
+        if (synthsStarted && superCollider != null) {
             superCollider.sendMessage(OscMessage.createNodeFreeMessage(BKGND_NODE_ID));
             superCollider.sendMessage(OscMessage.createNodeFreeMessage(STORY_NODE_ID));
             superCollider.sendMessage(OscMessage.createBufferFreeMessage(bufferIndex));

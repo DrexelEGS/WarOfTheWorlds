@@ -277,6 +277,11 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         if (this.state != State.Paused && !this.wakeLock.isHeld()) {
             this.wakeLock.acquire();
         }
+        // re-acquire supercollider sound service if we lost it:
+        if (this.soundManager.superCollider == null) {
+            Intent serviceIntent = new Intent(this, net.sf.supercollider.android.ScService.class);
+            bindService(serviceIntent, conn, BIND_AUTO_CREATE);
+        }
     }
 
     @Override
