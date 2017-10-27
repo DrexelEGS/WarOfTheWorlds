@@ -21,8 +21,8 @@ android {
         applicationId 'info.strank.wotw'
         targetSdkVersion 23
         minSdkVersion 23
-        versionCode 6
-        versionName "0.6.0"
+        versionCode 8
+        versionName "0.8.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
