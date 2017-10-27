@@ -35,27 +35,18 @@ public class SensorTracking {
     private static final LatLng cornerOfTheatreLocation = new LatLng(39.948306, -75.218923);
     private static final LatLng curioTheatreLocation = new LatLng(39.948211, -75.218528);
     /**
-     * this is a loop around Calvary:
-     type    latitude    longitude    name
-     W    39.9483212    -75.2189925    Story 1
-     W    39.9480961    -75.2196363    2
-     W    39.9475676    -75.2203926    3
-     W    39.9470371    -75.2197972    4
-     W    39.9474463    -75.2191374    5
-     W    39.9477959    -75.2186626    6
-     W    39.9481269    -75.2187592    7
-     W    39.9483922    -75.2183408    8
+     * Stories located around Calvary in Philadelphia:
      */
     private static final LatLng[] targetLocations = {
-            new LatLng(39.9483212,    -75.2189925),
-            new LatLng(39.9480961,    -75.2196363),
-            new LatLng(39.9475676,    -75.2203926),
-            new LatLng(39.9470371,    -75.2197972),
-            new LatLng(39.9474463,    -75.2191374),
-            new LatLng(39.9477959,    -75.2186626),
-            new LatLng(39.9481269,    -75.2187592),
-            new LatLng(39.9483922,    -75.2183408),
-            drexelGymLocation, // for testing TODO: comment out in final build
+            new LatLng(39.9473743,    -75.2178687),//    First Story
+            new LatLng(39.9477835,    -75.2173001),//    Second Story
+            new LatLng(39.9481804,    -75.2167261),//    Third Story
+            new LatLng(39.9485402,    -75.2171391),//    Fourth Story
+            new LatLng(39.9483017,    -75.2176407),//    Fifth Story
+            new LatLng(39.9483963,    -75.2183488),//    Sixth Story
+            new LatLng(39.9483182,    -75.2189791),//    Seventh Story
+            new LatLng(39.9479994,    -75.2186438),//    Eighth Story
+            //drexelGymLocation, // for testing
     };
 
     float[] mGravity;
