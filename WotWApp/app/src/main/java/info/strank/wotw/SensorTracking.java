@@ -7,6 +7,7 @@ import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.util.Log;
+import android.view.Surface;
 
 import com.google.android.gms.maps.model.LatLng;
 
@@ -114,8 +115,7 @@ public class SensorTracking {
         return false;
     }
 
-    public void updateBearing(SensorEvent event){
-        float azimut = 0;
+    public void updateBearing(SensorEvent event, int surfaceRotation){
         if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
             mGravity = event.values;
         }
@@ -123,17 +123,43 @@ public class SensorTracking {
             mGeomagnetic = event.values;
         }
         if (mGravity != null && mGeomagnetic != null) {
-            float R[] = new float[9];
-            float I[] = new float[9];
-            if (SensorManager.getRotationMatrix(R, I, mGravity, mGeomagnetic)) {
+            float azimut = 0;
+            float rotationMatrix[] = new float[9];
+            if (SensorManager.getRotationMatrix(rotationMatrix, null, mGravity, mGeomagnetic)) {
+                /* Compensate device orientation */
+                // http://android-developers.blogspot.de/2010/09/one-screen-turn-deserves-another.html
+                float[] remappedR = new float[9];
+                switch (surfaceRotation) {
+                    case Surface.ROTATION_0:
+                        SensorManager.remapCoordinateSystem(rotationMatrix,
+                                SensorManager.AXIS_X, SensorManager.AXIS_Y,
+                                remappedR);
+                        break;
+                    case Surface.ROTATION_90:
+                        SensorManager.remapCoordinateSystem(rotationMatrix,
+                                SensorManager.AXIS_Y,
+                                SensorManager.AXIS_MINUS_X,
+                                remappedR);
+                        break;
+                    case Surface.ROTATION_180:
+                        SensorManager.remapCoordinateSystem(rotationMatrix,
+                                SensorManager.AXIS_MINUS_X,
+                                SensorManager.AXIS_MINUS_Y,
+                                remappedR);
+                        break;
+                    case Surface.ROTATION_270:
+                        SensorManager.remapCoordinateSystem(rotationMatrix,
+                                SensorManager.AXIS_MINUS_Y,
+                                SensorManager.AXIS_X, remappedR);
+                        break;
+                }
                 // orientation contains azimut, pitch and roll
                 float orientation[] = new float[3];
-                SensorManager.getOrientation(R, orientation);
+                SensorManager.getOrientation(remappedR, orientation);
                 azimut = orientation[0]; // from -pi to +pi, 0 is north
             }
+            this.currentBearing = azimut * 180 / 3.14159f; // from radians to degrees
         }
-        float bearing = azimut * 180 / 3.14159f; // from radians to degrees
-        this.currentBearing = bearing;
     }
 
     public float getTargetBearing() {
