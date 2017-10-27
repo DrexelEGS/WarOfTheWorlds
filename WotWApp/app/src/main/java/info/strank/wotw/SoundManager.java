@@ -129,12 +129,18 @@ public class SoundManager {
         return min + rate * (max - min);
     }
 
+    private final long PAN_UPDATE_INTERVAL = 300; // ms
+    private long lastTimePanUpdated = 0;
     public double setSynthPan(double targetBearing) throws RemoteException {
-        double pan = targetBearing / 180; // -1 left to 1 right, used directly
-        if (synthsStarted && superCollider != null) {
+        double pan = targetBearing / 180; // -1 left to 1 right
+        pan = pan / 2.0; // full left/right seems like too much
+        long now = System.currentTimeMillis();
+        long timeSinceLastUpdate = now - lastTimePanUpdated;
+        if (synthsStarted && superCollider != null && timeSinceLastUpdate > PAN_UPDATE_INTERVAL) {
             //Log.d(LOG_LABEL, "Setting pan " + pan + " for bearing " + targetBearing);
             superCollider.sendMessage(OscMessage.createSetControlMessage(BKGND_NODE_ID, "pan", (float) pan));
             superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "pan", (float) pan));
+            lastTimePanUpdated = now;
         }
         return pan;
     }
@@ -167,7 +173,7 @@ public class SoundManager {
             superCollider.sendMessage(OscMessage.createSetControlMessage(STORY_NODE_ID, "amp",
                     (float) getInterpolated(amp, STORY_MIN_AMP, STORY_MAX_AMP)));
             // string for debugging display:
-            currentParamStr = String.format("Dist %.1fm (%.2f)", distance, dist);
+            currentParamStr = String.format("Distance %.1fm (%.2f)", distance, dist);
             Log.d(LOG_LABEL, currentParamStr + " pan " + pan + " amp " + amp);
             printMessages();
         }

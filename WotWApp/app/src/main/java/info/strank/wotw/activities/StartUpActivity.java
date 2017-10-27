@@ -440,6 +440,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         return mLocationRequest;
     }
 
+    Toast mToast = null;
     @Override
     public void onLocationChanged(Location location) {
         if (location != null && this.state == State.Tracking) {
@@ -451,7 +452,12 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
             } catch (RemoteException e){
                 e.printStackTrace();
             }
-            Toast.makeText(getApplicationContext(), this.soundManager.currentParamStr, Toast.LENGTH_SHORT).show();
+            if (mToast == null) {
+                mToast = Toast.makeText(getApplicationContext(), this.soundManager.currentParamStr, Toast.LENGTH_SHORT);
+            } else {
+                mToast.setText(this.soundManager.currentParamStr);
+            }
+            mToast.show();
         }
         if (this.mapFragment != null) {
             mapFragment.getMapAsync(this);
@@ -571,7 +577,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
         } else if (this.state == State.Tracking) {
             //just to make sure that updateBearing isn't called for no reason
             if(sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER || sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-                this.sensorTracking.updateBearing(sensorEvent);
+                this.sensorTracking.updateBearing(sensorEvent, getWindowManager().getDefaultDisplay().getRotation());
                 try {
                     this.soundManager.setSynthPan(this.sensorTracking.getTargetBearing());
                 } catch (RemoteException e){
@@ -581,7 +587,7 @@ public class StartUpActivity extends FragmentActivity implements OnMapReadyCallb
                     currentMarker.setRotation(this.sensorTracking.currentBearing);
                 }
             }
-            this.sensorFactory.dispatch(sensorEvent);
+            //this.sensorFactory.dispatch(sensorEvent);
         }
     }
 
