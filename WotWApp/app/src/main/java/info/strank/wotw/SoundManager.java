@@ -23,8 +23,8 @@ public class SoundManager {
 
     final String LOG_LABEL = "WotW.SoundManager";
 
-    public final double MAX_DISTANCE = 100; // meters
-    public final double MIN_DISTANCE = 10;
+    public final double MAX_DISTANCE = 50; // meters
+    public final double MIN_DISTANCE = 7.5;
     private final String BKGND_SYNTH_NAME = "sonar";
     private final int BKGND_NODE_ID = 1001;
     private final double BKGND_MIN_AMP = 0.1;
